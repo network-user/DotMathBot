@@ -31,9 +31,9 @@ async def start_handler(message: Message, state: FSMContext) -> None:
     name = message.from_user.first_name or get_text("welcome_fallback_name", lang)
     text = get_text("welcome", lang).format(name=name)
 
-    await message.answer("\u200b", reply_markup=ReplyKeyboardRemove())
+    await message.answer(text, reply_markup=ReplyKeyboardRemove(), parse_mode="Markdown")
     await message.answer(
-        text,
+        get_text("main_menu", lang),
         reply_markup=InlineKeyboards.main_menu(lang),
         parse_mode="Markdown",
     )
@@ -119,9 +119,9 @@ async def settings_command(message: Message) -> None:
 async def help_command(message: Message) -> None:
     lang = await get_user_language(message.from_user.id)
     text = get_text("help", lang)
-    await message.answer("\u200b", reply_markup=ReplyKeyboardRemove())
+    await message.answer(text, reply_markup=ReplyKeyboardRemove(), parse_mode="Markdown")
     await message.answer(
-        text,
+        get_text("main_menu", lang),
         reply_markup=InlineKeyboards.back_to_menu(lang),
         parse_mode="Markdown",
     )
@@ -134,10 +134,16 @@ async def back_to_menu_handler(callback: CallbackQuery, state: FSMContext) -> No
     lang = await get_user_language(callback.from_user.id)
     text = get_text("main_menu", lang)
     if data.get("mode") == "choose":
-        await callback.message.answer("\u200b", reply_markup=ReplyKeyboardRemove())
-    await callback.message.edit_text(
-        text,
-        reply_markup=InlineKeyboards.main_menu(lang),
-        parse_mode="Markdown",
-    )
+        await callback.message.answer(text, reply_markup=ReplyKeyboardRemove(), parse_mode="Markdown")
+        await callback.message.edit_text(
+            text,
+            reply_markup=InlineKeyboards.main_menu(lang),
+            parse_mode="Markdown",
+        )
+    else:
+        await callback.message.edit_text(
+            text,
+            reply_markup=InlineKeyboards.main_menu(lang),
+            parse_mode="Markdown",
+        )
     await callback.answer()

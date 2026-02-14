@@ -222,9 +222,13 @@ async def handle_typed_answer(message: Message, state: FSMContext) -> None:
 async def _abort_type_mode(message: Message, state: FSMContext) -> None:
     lang = await get_user_language(message.from_user.id)
     await state.clear()
-    await message.answer("", reply_markup=ReplyKeyboardRemove())
     await message.answer(
         get_text("training_abort", lang),
+        reply_markup=ReplyKeyboardRemove(),
+        parse_mode="Markdown",
+    )
+    await message.answer(
+        get_text("main_menu", lang),
         reply_markup=InlineKeyboards.back_to_menu(lang),
         parse_mode="Markdown",
     )
@@ -248,9 +252,13 @@ async def _finish_training_type_mode(message: Message, state: FSMContext, prefix
         + get_text("training_well_done", lang)
     )
     await state.clear()
-    await message.answer("", reply_markup=ReplyKeyboardRemove())
     await message.answer(
         text,
+        reply_markup=ReplyKeyboardRemove(),
+        parse_mode="Markdown",
+    )
+    await message.answer(
+        get_text("main_menu", lang),
         reply_markup=InlineKeyboards.back_to_menu(lang),
         parse_mode="Markdown",
     )
