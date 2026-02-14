@@ -34,8 +34,6 @@ async def settings_notifications_handler(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data.startswith("notify_preset_"))
 async def notify_preset_handler(callback: CallbackQuery, state: FSMContext) -> None:
-    from app.main import get_notification_service
-
     preset_str = callback.data.split("_")[-1]
     preset = NotificationPreset(preset_str)
     lang = await get_user_language(callback.from_user.id)
@@ -56,40 +54,51 @@ async def notify_preset_handler(callback: CallbackQuery, state: FSMContext) -> N
     await update_user_notifications(callback.from_user.id, preset_str)
 
     try:
-        service = get_notification_service()
-        bot = callback.bot
+        from app.context import get_notification_service
+
+        try:
+            service = get_notification_service()
+        except RuntimeError:
+            logger.warning(f"NotificationService not available, only DB updated for user {callback.from_user.id}")
+            service = None
+
+        if service:
+            bot = callback.bot
+
+            if preset == NotificationPreset.DISABLED:
+                service.unschedule_user(callback.from_user.id)
+                logger.info(f"Notifications disabled for user {callback.from_user.id}")
+            else:
+                config = NOTIFICATION_PRESETS[preset]
+
+                if not config["times"]:
+                    text = get_text("preset_config_error", lang).format(name=config["name"])
+                    logger.error(f"Preset {preset_str} has no times configured")
+                else:
+                    callback_func = partial(send_training_reminder, bot)
+                    service.schedule_user(
+                        telegram_id=callback.from_user.id,
+                        times=config["times"],
+                        callback=callback_func,
+                    )
+                    logger.info(f"Scheduled {len(config['times'])} reminders for user {callback.from_user.id}")
 
         if preset == NotificationPreset.DISABLED:
-            service.unschedule_user(callback.from_user.id)
             text = get_text("notifications_disabled", lang)
-            logger.info(f"Notifications disabled for user {callback.from_user.id}")
         else:
             config = NOTIFICATION_PRESETS[preset]
-
-            if not config["times"]:
-                text = get_text("preset_config_error", lang).format(name=config["name"])
-                logger.error(f"Preset {preset_str} has no times configured")
-            else:
-                callback_func = partial(send_training_reminder, bot)
-                service.schedule_user(
-                    telegram_id=callback.from_user.id,
-                    times=config["times"],
-                    callback=callback_func,
-                )
-
-                times_str = ", ".join([t.strftime("%H:%M") for t in config["times"]])
-                preset_keys = {
-                    NotificationPreset.MORNING: "notify_preset_morning",
-                    NotificationPreset.LUNCH: "notify_preset_lunch",
-                    NotificationPreset.EVENING: "notify_preset_evening",
-                    NotificationPreset.THREE_TIMES: "notify_preset_three",
-                }
-                preset_name = get_text(preset_keys.get(preset, "notify_preset_morning"), lang)
-                text = get_text("notifications_set", lang).format(
-                    name=preset_name,
-                    times=times_str,
-                )
-                logger.info(f"Scheduled {len(config['times'])} reminders for user {callback.from_user.id}")
+            times_str = ", ".join([t.strftime("%H:%M") for t in config["times"]])
+            preset_keys = {
+                NotificationPreset.MORNING: "notify_preset_morning",
+                NotificationPreset.LUNCH: "notify_preset_lunch",
+                NotificationPreset.EVENING: "notify_preset_evening",
+                NotificationPreset.THREE_TIMES: "notify_preset_three",
+            }
+            preset_name = get_text(preset_keys.get(preset, "notify_preset_morning"), lang)
+            text = get_text("notifications_set", lang).format(
+                name=preset_name,
+                times=times_str,
+            )
 
     except Exception as e:
         logger.error(f"Failed to update notification schedule for user {callback.from_user.id}: {e}", exc_info=True)
@@ -105,7 +114,7 @@ async def notify_preset_handler(callback: CallbackQuery, state: FSMContext) -> N
 
 @router.message(NotificationStates.waiting_for_custom_time)
 async def custom_time_input_handler(message: Message, state: FSMContext) -> None:
-    from app.main import get_notification_service
+    from app.context import get_notification_service
 
     lang = await get_user_language(message.from_user.id)
 

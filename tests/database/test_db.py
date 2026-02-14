@@ -23,14 +23,14 @@ async def db():
 
 @pytest.mark.asyncio
 async def test_init_db_creates_tables(db):
-    """init_db does not raise."""
     pass
 
 
 @pytest.mark.asyncio
 async def test_get_or_create_user_creates_new_user(db):
-    user = await get_or_create_user(telegram_id=12345, username="test", first_name="Test")
+    user, created = await get_or_create_user(telegram_id=12345, username="test", first_name="Test")
     assert user is not None
+    assert created is True
     assert user.telegram_id == "12345"
     assert user.username == "test"
     assert user.first_name == "Test"
@@ -38,8 +38,11 @@ async def test_get_or_create_user_creates_new_user(db):
 
 @pytest.mark.asyncio
 async def test_get_or_create_user_returns_existing(db):
-    await get_or_create_user(telegram_id=999, username="first", first_name="First")
-    user2 = await get_or_create_user(telegram_id=999, username="second", first_name="Second")
+    user1, created1 = await get_or_create_user(telegram_id=999, username="first", first_name="First")
+    assert created1 is True
+
+    user2, created2 = await get_or_create_user(telegram_id=999, username="second", first_name="Second")
+    assert created2 is False
     assert user2.username == "first"
     assert user2.first_name == "First"
 
@@ -51,7 +54,7 @@ async def test_get_user_returns_none_for_unknown(db):
 
 @pytest.mark.asyncio
 async def test_get_user_returns_user(db):
-    await get_or_create_user(telegram_id=111, username="u1", first_name="U1")
+    user, created = await get_or_create_user(telegram_id=111, username="u1", first_name="U1")
     user = await get_user(111)
     assert user is not None
     assert user.telegram_id == "111"
@@ -65,7 +68,7 @@ async def test_get_user_language_default_ru(db):
 
 @pytest.mark.asyncio
 async def test_update_and_get_user_language(db):
-    await get_or_create_user(telegram_id=222, username="u2", first_name="U2")
+    user, created = await get_or_create_user(telegram_id=222, username="u2", first_name="U2")
     assert await get_user_language(222) in ("ru", None) or True
     await update_user_language(222, "en")
     assert await get_user_language(222) == "en"
@@ -85,7 +88,7 @@ async def test_update_user_notifications_unknown_user_does_not_raise(db):
 
 @pytest.mark.asyncio
 async def test_update_user_notifications_success(db):
-    await get_or_create_user(telegram_id=333, username="u3", first_name="U3")
+    user, created = await get_or_create_user(telegram_id=333, username="u3", first_name="U3")
     await update_user_notifications(333, "morning")
     user = await get_user(333)
     assert user.notification_preset == "morning"
@@ -108,7 +111,7 @@ async def test_create_training_session_raises_for_unknown_user(db):
 
 @pytest.mark.asyncio
 async def test_create_and_complete_training_session(db):
-    await get_or_create_user(telegram_id=444, username="u4", first_name="U4")
+    user, created = await get_or_create_user(telegram_id=444, username="u4", first_name="U4")
     session = await create_training_session(
         telegram_id=444,
         difficulty="easy",
@@ -136,7 +139,7 @@ async def test_get_top_users_returns_list(db):
 
 @pytest.mark.asyncio
 async def test_get_top_users_after_training(db):
-    await get_or_create_user(telegram_id=555, username="u5", first_name="U5")
+    user, created = await get_or_create_user(telegram_id=555, username="u5", first_name="U5")
     session = await create_training_session(555, "easy", "mult", 3)
     await complete_training_session(session.id, 3, 0)
     top = await get_top_users(10)

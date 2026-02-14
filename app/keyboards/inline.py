@@ -123,6 +123,17 @@ class InlineKeyboards:
         return InlineKeyboardMarkup(inline_keyboard=buttons)
 
     @staticmethod
+    def cancel_custom_time(lang: str = "ru") -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(
+                    text=get_text("btn_cancel", lang),
+                    callback_data="cancel_custom_time"
+                )]
+            ]
+        )
+
+    @staticmethod
     def tips_menu(lang: str = "ru") -> InlineKeyboardMarkup:
         buttons = [
             [

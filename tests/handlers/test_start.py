@@ -49,7 +49,7 @@ async def test_start_handler_creates_user_and_sends_welcome(message, state):
     with patch("app.handlers.start.get_or_create_user", new_callable=AsyncMock) as m_get:
         user = MagicMock()
         user.language = "ru"
-        m_get.return_value = user
+        m_get.return_value = (user, True)
         await start_handler(message, state)
     m_get.assert_called_once_with(telegram_id=12345, username="testuser", first_name="Test")
     message.answer.assert_called_once()
