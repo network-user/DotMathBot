@@ -153,7 +153,10 @@ async def _send_problem_type_mode(message: Message, state: FSMContext, idx: int)
     )
 
 
-async def show_problem(callback: CallbackQuery, state: FSMContext) -> None:
+async def show_problem(
+    callback: CallbackQuery, state: FSMContext, prefix: str = ""
+) -> None:
+    """Показать следующий вопрос. prefix — текст про предыдущий ответ (правильно/неправильно)."""
     data = await state.get_data()
     problems = data["problems"]
     idx = int(data["idx"])
@@ -174,6 +177,8 @@ async def show_problem(callback: CallbackQuery, state: FSMContext) -> None:
         total=len(problems),
         expr=problem_text,
     )
+    if prefix:
+        text = prefix + "\n\n" + text
 
     await state.set_state(TrainingStates.waiting_for_answer)
     await safe_edit_text(
@@ -294,7 +299,7 @@ async def handle_answer(callback: CallbackQuery, state: FSMContext) -> None:
 
     if has_next:
         await state.update_data(idx=next_idx)
-        await show_problem(callback, state)  # сразу следующий вопрос
+        await show_problem(callback, state, prefix=feedback)
     else:
         await finish_training(callback, state, feedback)
 
