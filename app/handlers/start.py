@@ -8,6 +8,7 @@ from aiogram.fsm.context import FSMContext
 from app.keyboards.inline import InlineKeyboards
 from app.database.db import get_or_create_user, get_user_language, update_user_language
 from app.locales import get_text
+from app.handlers.training import TrainingStates
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -55,6 +56,8 @@ async def language_switch_handler(callback: CallbackQuery, state: FSMContext) ->
 async def train_command(message: Message, state: FSMContext) -> None:
     await state.clear()
     lang = await get_user_language(message.from_user.id)
+    await state.set_state(TrainingStates.waiting_for_difficulty)
+    await state.update_data(lang=lang)
     text = get_text("choose_difficulty", lang)
     await message.answer(
         text,
