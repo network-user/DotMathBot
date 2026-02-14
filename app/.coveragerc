@@ -1,0 +1,26 @@
+[run]
+source = app
+omit =
+    */tests/*
+    */venv/*
+    */.venv/*
+    */site-packages/*
+    app/__init__.py
+    app/__main__.py
+
+[report]
+precision = 2
+show_missing = True
+skip_covered = False
+
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    @abstractmethod
+
+[html]
+directory = htmlcov

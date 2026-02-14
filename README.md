@@ -45,4 +45,7 @@ app/
 - Создайте .env, склонировав env dev
 - `pip install -r requirements.txt`
 - `python -m app.main`
+- Запуск тестов (Windows)
+- `.venv\Scripts\python -m pytest tests\ -v`
+- `pytest tests/ --cov=app --cov-report=term-missing`
 
