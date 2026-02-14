@@ -1,0 +1,63 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Type checkers / linters
+.mypy_cache/
+.pyre/
+.ruff_cache/
+
+# IDEs / editors
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Databases / local data
+app/data/
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.sqlite-journal
+*.db-wal
+*.db-shm
+
+# Logs
+*.log
+logs/
+
+# APScheduler (if you store jobstores on disk later)
+apscheduler.sqlite
+
+# OS
+Thumbs.db
