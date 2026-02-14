@@ -48,7 +48,7 @@ class TrainingMode(str, Enum):
     MIXED = "mixed"
 
 TRAINING_MODE_CONFIG = {
-    TrainingMode.CHOOSE_ANSWER: "Выбрать правильный ответ",
+    TrainingMode.CHOOSE_ANSWER: "Напиши ответ сам",
     TrainingMode.MULTIPLICATION_ONLY: "Только умножение",
     TrainingMode.DIVISION_ONLY: "Только деление",
     TrainingMode.MIXED: "Смешанный режим"

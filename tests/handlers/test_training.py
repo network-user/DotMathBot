@@ -64,13 +64,13 @@ async def test_abort_training_handler(callback, state):
     callback.answer.assert_called_once()
 
 
-def test_kb_after_answer_has_next():
-    kb = kb_after_answer(True, "ru")
+def test_kb_after_answer():
+    kb = kb_after_answer("ru")
     assert kb.inline_keyboard
     assert len(kb.inline_keyboard) == 2
 
 
-def test_kb_after_answer_no_next():
-    kb = kb_after_answer(False, "en")
+def test_kb_after_answer_en():
+    kb = kb_after_answer("en")
     assert kb.inline_keyboard
     assert len(kb.inline_keyboard) >= 1

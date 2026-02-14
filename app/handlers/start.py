@@ -1,7 +1,7 @@
 import logging
 
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 
@@ -31,6 +31,7 @@ async def start_handler(message: Message, state: FSMContext) -> None:
     name = message.from_user.first_name or get_text("welcome_fallback_name", lang)
     text = get_text("welcome", lang).format(name=name)
 
+    await message.answer("\u200b", reply_markup=ReplyKeyboardRemove())
     await message.answer(
         text,
         reply_markup=InlineKeyboards.main_menu(lang),
@@ -118,6 +119,7 @@ async def settings_command(message: Message) -> None:
 async def help_command(message: Message) -> None:
     lang = await get_user_language(message.from_user.id)
     text = get_text("help", lang)
+    await message.answer("\u200b", reply_markup=ReplyKeyboardRemove())
     await message.answer(
         text,
         reply_markup=InlineKeyboards.back_to_menu(lang),
@@ -127,9 +129,12 @@ async def help_command(message: Message) -> None:
 
 @router.callback_query(F.data == "back_to_menu")
 async def back_to_menu_handler(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
     await state.clear()
     lang = await get_user_language(callback.from_user.id)
     text = get_text("main_menu", lang)
+    if data.get("mode") == "choose":
+        await callback.message.answer("\u200b", reply_markup=ReplyKeyboardRemove())
     await callback.message.edit_text(
         text,
         reply_markup=InlineKeyboards.main_menu(lang),

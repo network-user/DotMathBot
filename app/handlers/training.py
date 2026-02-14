@@ -6,10 +6,17 @@ from aiogram import Router, F
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+    ReplyKeyboardRemove,
+)
 
 from app.database.db import complete_training_session, create_training_session, get_user_language
 from app.keyboards.inline import InlineKeyboards
+from app.keyboards.reply import abort_training as reply_kb_abort_training
 from app.locales import get_text
 from app.services.problem_generator import ProblemGenerator
 from app.utils.constants import DIFFICULTY_CONFIG, Difficulty, TrainingMode
@@ -22,7 +29,6 @@ class TrainingStates(StatesGroup):
     waiting_for_difficulty = State()
     waiting_for_mode = State()
     waiting_for_answer = State()
-    waiting_next = State()
 
 
 async def safe_edit_text(
@@ -40,28 +46,24 @@ async def safe_edit_text(
         raise
 
 
-def kb_after_answer(has_next: bool, lang: str = "ru") -> InlineKeyboardMarkup:
-    row: list[InlineKeyboardButton] = []
-    if has_next:
-        row.append(
-            InlineKeyboardButton(
-                text=get_text("btn_next", lang),
-                callback_data="next_problem",
-            )
-        )
-    row.append(
-        InlineKeyboardButton(
-            text=get_text("btn_abort_training", lang),
-            callback_data="abort_training",
-        )
+def kb_after_answer(lang: str = "ru") -> InlineKeyboardMarkup:
+    """Клавиатура после ответа (только «Прервать» и «В меню»)."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=get_text("btn_abort_training", lang),
+                    callback_data="abort_training",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=get_text("btn_back_to_menu", lang),
+                    callback_data="back_to_menu",
+                )
+            ],
+        ]
     )
-    row2 = [
-        InlineKeyboardButton(
-            text=get_text("btn_back_to_menu", lang),
-            callback_data="back_to_menu",
-        )
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=[row, row2])
 
 
 @router.callback_query(F.data == "start_training")
@@ -119,8 +121,36 @@ async def select_mode_handler(callback: CallbackQuery, state: FSMContext) -> Non
         current_problem_answer=None,
     )
 
-    await show_problem(callback, state)
+    if mode == TrainingMode.CHOOSE_ANSWER:
+        await _send_problem_type_mode(callback.message, state, idx=0)
+    else:
+        await show_problem(callback, state)
     await callback.answer()
+
+
+def _problem_text_type_mode(problem, idx: int, total: int, lang: str) -> str:
+    problem_line = f"{problem.first_num} {problem.operation} {problem.second_num}"
+    return get_text("training_problem_type_answer", lang).format(
+        current=idx + 1,
+        total=total,
+        expr=problem_line,
+    )
+
+
+async def _send_problem_type_mode(message: Message, state: FSMContext, idx: int) -> None:
+    """Отправить новый вопрос в режиме «Напиши ответ сам» (новое сообщение, reply-клавиатура)."""
+    data = await state.get_data()
+    problems = data["problems"]
+    lang = data.get("lang", "ru")
+    problem = problems[idx]
+    await state.update_data(current_problem_answer=problem.answer)
+    await state.set_state(TrainingStates.waiting_for_answer)
+    text = _problem_text_type_mode(problem, idx, len(problems), lang)
+    await message.answer(
+        text,
+        reply_markup=reply_kb_abort_training(lang),
+        parse_mode="Markdown",
+    )
 
 
 async def show_problem(callback: CallbackQuery, state: FSMContext) -> None:
@@ -153,6 +183,79 @@ async def show_problem(callback: CallbackQuery, state: FSMContext) -> None:
     )
 
 
+@router.message(F.text, TrainingStates.waiting_for_answer)
+async def handle_typed_answer(message: Message, state: FSMContext) -> None:
+    """Режим «Напиши ответ сам»: пользователь вводит ответ текстом, каждое сообщение — новое."""
+    data = await state.get_data()
+    if data.get("mode") != TrainingMode.CHOOSE_ANSWER.value:
+        return
+    lang = data.get("lang", "ru")
+    abort_btn_ru = get_text("btn_abort_training_full", "ru")
+    abort_btn_en = get_text("btn_abort_training_full", "en")
+    if message.text and message.text.strip() in (abort_btn_ru, abort_btn_en):
+        await _abort_type_mode(message, state)
+        return
+    try:
+        user_answer = int(message.text.strip())
+    except (ValueError, AttributeError):
+        await message.answer(get_text("training_type_answer_invalid", lang))
+        return
+    correct_answer = int(data["current_problem_answer"])
+    is_correct = user_answer == correct_answer
+    correct = int(data["correct"]) + (1 if is_correct else 0)
+    incorrect = int(data["incorrect"]) + (0 if is_correct else 1)
+    next_idx = int(data["idx"]) + 1
+    problems = data["problems"]
+    has_next = next_idx < len(problems)
+    await state.update_data(correct=correct, incorrect=incorrect, idx=next_idx)
+    if is_correct:
+        feedback = get_text("training_correct", lang)
+    else:
+        feedback = get_text("training_incorrect", lang).format(answer=correct_answer)
+    if has_next:
+        await message.answer(feedback, parse_mode="Markdown")
+        await _send_problem_type_mode(message, state, idx=next_idx)
+    else:
+        await _finish_training_type_mode(message, state, feedback)
+
+
+async def _abort_type_mode(message: Message, state: FSMContext) -> None:
+    lang = await get_user_language(message.from_user.id)
+    await state.clear()
+    await message.answer("", reply_markup=ReplyKeyboardRemove())
+    await message.answer(
+        get_text("training_abort", lang),
+        reply_markup=InlineKeyboards.back_to_menu(lang),
+        parse_mode="Markdown",
+    )
+
+
+async def _finish_training_type_mode(message: Message, state: FSMContext, prefix: str = "") -> None:
+    data = await state.get_data()
+    lang = data.get("lang", "ru")
+    session_id = int(data["session_id"])
+    correct = int(data["correct"])
+    incorrect = int(data["incorrect"])
+    total = correct + incorrect
+    accuracy = (correct / total * 100.0) if total else 0.0
+    await complete_training_session(session_id=session_id, correct=correct, incorrect=incorrect)
+    text = (
+        (prefix + "\n\n" if prefix else "")
+        + get_text("training_result_title", lang)
+        + get_text("training_result_correct", lang).format(correct=correct, total=total)
+        + get_text("training_result_incorrect", lang).format(incorrect=incorrect, total=total)
+        + get_text("training_result_accuracy", lang).format(acc=accuracy)
+        + get_text("training_well_done", lang)
+    )
+    await state.clear()
+    await message.answer("", reply_markup=ReplyKeyboardRemove())
+    await message.answer(
+        text,
+        reply_markup=InlineKeyboards.back_to_menu(lang),
+        parse_mode="Markdown",
+    )
+
+
 @router.callback_query(F.data.startswith("answer_"), TrainingStates.waiting_for_answer)
 async def handle_answer(callback: CallbackQuery, state: FSMContext) -> None:
     _, idx_str, ans_str = callback.data.split("_")
@@ -174,7 +277,6 @@ async def handle_answer(callback: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(
         correct=correct,
         incorrect=incorrect,
-        idx=next_idx,
     )
 
     if is_correct:
@@ -183,22 +285,11 @@ async def handle_answer(callback: CallbackQuery, state: FSMContext) -> None:
         feedback = get_text("training_incorrect", lang).format(answer=correct_answer)
 
     if has_next:
-        await state.set_state(TrainingStates.waiting_next)
-        next_prompt = get_text("training_next_prompt", lang)
-        await safe_edit_text(
-            callback,
-            feedback + next_prompt,
-            kb_after_answer(True, lang),
-        )
+        await state.update_data(idx=next_idx)
+        await show_problem(callback, state)  # сразу следующий вопрос
     else:
         await finish_training(callback, state, feedback)
 
-    await callback.answer()
-
-
-@router.callback_query(F.data == "next_problem", TrainingStates.waiting_next)
-async def next_problem_handler(callback: CallbackQuery, state: FSMContext) -> None:
-    await show_problem(callback, state)
     await callback.answer()
 
 
