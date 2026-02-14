@@ -22,7 +22,7 @@ setup_logging(
 logger = logging.getLogger(__name__)
 
 notification_service: NotificationService | None = None
-
+# ToDO: Весь лишний функционал позже вынести в отдельные модули
 
 def get_notification_service() -> NotificationService:
     global notification_service
@@ -45,17 +45,25 @@ async def load_scheduled_users(bot: Bot, service: NotificationService) -> None:
     for user in users:
         try:
             preset = NotificationPreset(user.notification_preset)
-            config = NOTIFICATION_PRESETS.get(preset)
 
-            if not config or not config["times"]:
-                logger.warning(f"No times configured for preset {preset.value} (user {user.telegram_id})")
-                continue
+            if preset == NotificationPreset.CUSTOM:
+                custom_times = NotificationService.parse_times(user.custom_notification_times)
+                if not custom_times:
+                    logger.warning(f"User {user.telegram_id} has custom preset but no times configured")
+                    continue
+                times = custom_times
+            else:
+                config = NOTIFICATION_PRESETS.get(preset)
+                if not config or not config["times"]:
+                    logger.warning(f"No times configured for preset {preset.value} (user {user.telegram_id})")
+                    continue
+                times = config["times"]
 
             callback = partial(send_training_reminder, bot)
 
             service.schedule_user(
                 telegram_id=int(user.telegram_id),
-                times=config["times"],
+                times=times,
                 callback=callback,
             )
             scheduled_count += 1

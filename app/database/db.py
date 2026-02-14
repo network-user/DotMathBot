@@ -85,7 +85,11 @@ async def update_user_language(telegram_id: int, lang: str) -> None:
             await session.commit()
 
 
-async def update_user_notifications(telegram_id: int, preset: str, custom_times: Optional[list[str]] = None) -> None:
+async def update_user_notifications(
+        telegram_id: int,
+        preset: str,
+        custom_times: list[str] | None = None
+) -> None:
     async with async_session_maker() as session:
         stmt = select(User).where(User.telegram_id == str(telegram_id))
         result = await session.execute(stmt)
@@ -98,10 +102,12 @@ async def update_user_notifications(telegram_id: int, preset: str, custom_times:
         user.notification_enabled = preset != "disabled"
 
         if custom_times:
+            import json
             user.custom_notification_times = json.dumps(custom_times)
+            logger.info(f"Custom times saved for user {telegram_id}: {custom_times}")
 
         await session.commit()
-        logger.debug("Notifications updated for telegram_id=%s preset=%s", telegram_id, preset)
+        logger.info(f"Notifications updated: user={telegram_id}, preset={preset}, enabled={user.notification_enabled}")
 
 
 async def create_training_session(telegram_id: int, difficulty: str, mode: str, total_problems: int) -> TrainingSession:

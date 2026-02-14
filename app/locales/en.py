@@ -98,4 +98,19 @@ TEXTS = {
     "btn_abort_training_full": "❌ Abort training",
     "language_changed": "🌐 Язык изменён на русский.",
     "language_changed_en": "🌐 Language set to English.",
+    "custom_time_input": "🕒 **Custom Notification Time**\n\n"
+        "Enter time in **HH:MM** format (multiple times separated by comma or space)\n\n"
+        "**Examples:**\n"
+        "• `07:30`\n"
+        "• `08:00, 14:30, 20:00`\n"
+        "• `0730 1430 2000`\n\n"
+        "Send a message with the time:",
+
+    "custom_time_invalid": "⚠️ **Invalid time format**\n\n"
+        "Please use **HH:MM** format\n\n"
+        "Examples: `07:30`, `08:00, 14:30`, `0730 1430`",
+
+    "custom_time_cancelled": "❌ Custom time setup cancelled.",
+
+    "btn_cancel": "❌ Cancel",
 }
