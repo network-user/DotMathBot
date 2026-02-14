@@ -15,3 +15,5 @@ def get_text(key: str, lang: str | None = None) -> str:
     if key in texts:
         return texts[key]
     return LOCALES[DEFAULT_LANG].get(key, key)
+
+# ToDO: Разделение локализации на файлы по модулям. (common.py, start.py, ...)

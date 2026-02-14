@@ -15,17 +15,21 @@ logger = logging.getLogger(__name__)
 
 @router.message(CommandStart())
 async def start_handler(message: Message, state: FSMContext) -> None:
-    user = await get_or_create_user(
+    user, created = await get_or_create_user(
         telegram_id=message.from_user.id,
         username=message.from_user.username,
         first_name=message.from_user.first_name,
     )
-    logger.info("New user: id=%s username=%s", message.from_user.id, message.from_user.username)
+
+    if created:
+        logger.info("New user registered: id=%s username=%s", message.from_user.id, message.from_user.username)
+
     await state.clear()
 
     lang = getattr(user, "language", None) or "ru"
     name = message.from_user.first_name or get_text("welcome_fallback_name", lang)
     text = get_text("welcome", lang).format(name=name)
+
     await message.answer(
         text,
         reply_markup=InlineKeyboards.main_menu(lang),

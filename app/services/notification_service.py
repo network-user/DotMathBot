@@ -4,7 +4,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import time
-from typing import Iterable, Sequence
+from typing import Callable, Awaitable, Sequence
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -24,9 +24,15 @@ class ReminderJob:
 
 class NotificationService:
 
-    def __init__(self, *, timezone: str = "UTC", scheduler: AsyncIOScheduler | None = None) -> None:
+    def __init__(
+            self,
+            *,
+            timezone: str = "Europe/Moscow",
+            scheduler: AsyncIOScheduler | None = None,
+    ) -> None:
         self._scheduler = scheduler or AsyncIOScheduler(timezone=timezone)
         self._started = False
+        logger.info(f"NotificationService initialized with timezone={timezone}")
 
     @property
     def scheduler(self) -> AsyncIOScheduler:
@@ -46,16 +52,33 @@ class NotificationService:
 
     def unschedule_user(self, telegram_id: int) -> None:
         prefix = f"reminder:{telegram_id}:"
+        removed_count = 0
+
         for job in list(self._scheduler.get_jobs()):
             if job.id.startswith(prefix):
                 self._scheduler.remove_job(job.id)
-        logger.debug("Unscheduled all reminders for telegram_id=%s", telegram_id)
+                removed_count += 1
 
-    def schedule_user(self, telegram_id: int, times: Sequence[time], *, callback) -> None:
+        if removed_count > 0:
+            logger.info(f"Removed {removed_count} reminders for telegram_id={telegram_id}")
+
+    def schedule_user(
+            self,
+            telegram_id: int,
+            times: Sequence[time],
+            *,
+            callback: Callable[[int], Awaitable[None]],
+    ) -> None:
         self.unschedule_user(telegram_id)
+
+        if not times:
+            logger.info(f"No times to schedule for telegram_id={telegram_id}")
+            return
+
         for t in times:
             rj = ReminderJob(telegram_id=telegram_id, at=t)
-            trigger = CronTrigger(hour=t.hour, minute=t.minute)
+            trigger = CronTrigger(hour=t.hour, minute=t.minute, timezone=self._scheduler.timezone)
+
             self._scheduler.add_job(
                 callback,
                 trigger=trigger,
@@ -66,7 +89,16 @@ class NotificationService:
                 misfire_grace_time=60,
                 coalesce=True,
             )
-        logger.info("Scheduled %s reminder(s) for telegram_id=%s", len(times), telegram_id)
+            logger.debug(f"Added reminder: {rj.job_id} at {t.strftime('%H:%M')}")
+
+        logger.info(f"Scheduled {len(times)} reminders for telegram_id={telegram_id}")
+
+    def get_user_jobs(self, telegram_id: int) -> list[str]:
+        prefix = f"reminder:{telegram_id}:"
+        return [job.id for job in self._scheduler.get_jobs() if job.id.startswith(prefix)]
+
+    def get_all_jobs_count(self) -> int:
+        return len(self._scheduler.get_jobs())
 
     @staticmethod
     def parse_times(value: str | None) -> list[time]:
@@ -74,7 +106,6 @@ class NotificationService:
             return []
 
         value = value.strip()
-        items: Iterable[str]
 
         if value.startswith("["):
             try:
@@ -84,6 +115,7 @@ class NotificationService:
                 else:
                     return []
             except json.JSONDecodeError:
+                logger.warning(f"Failed to parse JSON: {value}")
                 return []
         else:
             items = [x.strip() for x in value.split(",") if x.strip()]
@@ -95,6 +127,10 @@ class NotificationService:
                 h, m = int(hh), int(mm)
                 if 0 <= h <= 23 and 0 <= m <= 59:
                     out.append(time(h, m))
-            except Exception:
+                else:
+                    logger.warning(f"Invalid time: {s}")
+            except Exception as e:
+                logger.warning(f"Failed to parse time '{s}': {e}")
                 continue
+
         return out

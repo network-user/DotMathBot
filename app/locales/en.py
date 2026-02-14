@@ -1,5 +1,5 @@
+# app/locales/en.py
 # -*- coding: utf-8 -*-
-"""English locale."""
 
 TEXTS = {
     "welcome": "👋 Hi, {name}!\n\n"
@@ -57,6 +57,13 @@ TEXTS = {
     "notify_preset_disabled": "❌ Disabled",
     "notifications_set": "✅ Notifications set: {name}\n\nTime: {times}",
     "notifications_disabled": "❌ Notifications disabled",
+    "custom_time_unavailable": "🕒 **Custom Time**\n\n⚠️ Feature under development.\nPlease choose one of the preset options.",
+    "feature_unavailable": "Feature not available yet",
+    "preset_config_error": "⚠️ **Error:** No times configured for preset {name}.",
+    "notification_error": "⚠️ **Error configuring notifications.** Please try again later.",
+    "current_notifications": "✅ **Current Settings**\n\nPreset: {name}\nTime: {times}\nStatus: Enabled",
+    "preset_misconfigured": "⚠️ Preset '{preset}' is misconfigured",
+    "unknown_preset": "⚠️ Unknown preset: {preset}",
     "help": "📖 **Bot help**\n\n"
     "**Commands:**\n"
     "/start - Main menu\n"

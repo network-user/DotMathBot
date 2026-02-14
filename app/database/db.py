@@ -26,24 +26,29 @@ async def get_session() -> AsyncSession:
 
 
 
-async def get_or_create_user(telegram_id: int, username: Optional[str] = None, first_name: Optional[str] = None) -> User:
+async def get_or_create_user(
+        telegram_id: int,
+        username: str | None = None,
+        first_name: str | None = None
+) -> tuple[User, bool]:
     async with async_session_maker() as session:
         stmt = select(User).where(User.telegram_id == str(telegram_id))
         result = await session.execute(stmt)
         user = result.scalar_one_or_none()
 
-        if not user:
-            user = User(
-                telegram_id=str(telegram_id),
-                username=username,
-                first_name=first_name
-            )
-            session.add(user)
-            await session.commit()
-            await session.refresh(user)
+        if user:
+            return user, False
 
-        return user
+        user = User(
+            telegram_id=str(telegram_id),
+            username=username,
+            first_name=first_name
+        )
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
 
+        return user, True
 
 async def get_user(telegram_id: int) -> Optional[User]:
     async with async_session_maker() as session:
@@ -58,6 +63,16 @@ async def get_user_language(telegram_id: int) -> str:
     if not user or not getattr(user, "language", None):
         return "ru"
     return user.language or "ru"
+
+
+async def get_all_users_with_notifications() -> list[User]:
+    async with async_session_maker() as session:
+        stmt = select(User).where(
+            User.notification_enabled == True,
+            User.notification_preset != "disabled"
+        )
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
 
 
 async def update_user_language(telegram_id: int, lang: str) -> None:
