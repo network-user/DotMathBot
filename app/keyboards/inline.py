@@ -170,3 +170,14 @@ class InlineKeyboards:
                 ]
             ]
         )
+
+    @staticmethod
+    def leaderboard_mode_choice(lang: str = "ru") -> InlineKeyboardMarkup:
+        buttons = [
+            [InlineKeyboardButton(text=get_text("btn_leaderboard_streak", lang), callback_data="leaderboard_streak")],
+            [InlineKeyboardButton(text=get_text("btn_leaderboard_solved", lang), callback_data="leaderboard_solved")],
+            [InlineKeyboardButton(text=get_text("btn_leaderboard_accuracy", lang), callback_data="leaderboard_accuracy")],
+            [InlineKeyboardButton(text=get_text("btn_leaderboard_weighted", lang), callback_data="leaderboard_weighted")],
+            [InlineKeyboardButton(text=get_text("btn_back_to_menu", lang), callback_data="back_to_menu")],
+        ]
+        return InlineKeyboardMarkup(inline_keyboard=buttons)
