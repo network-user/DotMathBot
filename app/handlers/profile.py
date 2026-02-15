@@ -27,10 +27,25 @@ async def show_profile_handler(callback: CallbackQuery) -> None:
 @router.callback_query(F.data == "show_leaderboard")
 async def show_leaderboard_handler(callback: CallbackQuery) -> None:
     lang = await get_user_language(callback.from_user.id)
-    leaderboard_text = await StatsService.get_formatted_leaderboard(lang=lang)
+    text = await StatsService.get_leaderboard_choose_mode_text(lang)
+    await callback.message.edit_text(
+        text,
+        reply_markup=InlineKeyboards.leaderboard_mode_choice(lang),
+        parse_mode="Markdown",
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.in_({"leaderboard_streak", "leaderboard_solved", "leaderboard_accuracy", "leaderboard_weighted"}))
+async def show_leaderboard_mode_handler(callback: CallbackQuery) -> None:
+    lang = await get_user_language(callback.from_user.id)
+    mode = callback.data.replace("leaderboard_", "")
+    leaderboard_text = await StatsService.get_formatted_leaderboard(
+        limit=10, lang=lang, mode=mode, telegram_id=callback.from_user.id
+    )
     await callback.message.edit_text(
         leaderboard_text,
-        reply_markup=InlineKeyboards.back_to_menu(lang),
+        reply_markup=InlineKeyboards.leaderboard_mode_choice(lang),
         parse_mode="Markdown",
     )
     await callback.answer()

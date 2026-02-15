@@ -85,10 +85,10 @@ async def top_command(message: Message) -> None:
     from app.services.stats_service import StatsService
 
     lang = await get_user_language(message.from_user.id)
-    leaderboard_text = await StatsService.get_formatted_leaderboard(lang=lang)
+    text = await StatsService.get_leaderboard_choose_mode_text(lang)
     await message.answer(
-        leaderboard_text,
-        reply_markup=InlineKeyboards.back_to_menu(lang),
+        text,
+        reply_markup=InlineKeyboards.leaderboard_mode_choice(lang),
         parse_mode="Markdown",
     )
 

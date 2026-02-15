@@ -35,9 +35,10 @@ async def test_show_profile_handler(callback):
 @pytest.mark.asyncio
 async def test_show_leaderboard_handler(callback):
     with patch("app.handlers.profile.get_user_language", new_callable=AsyncMock, return_value="ru"), \
-         patch("app.handlers.profile.StatsService.get_formatted_leaderboard", new_callable=AsyncMock, return_value="🏆 Топ"):
+         patch("app.handlers.profile.StatsService.get_leaderboard_choose_mode_text", new_callable=AsyncMock, return_value="🏆 Выбери режим топа"):
         await show_leaderboard_handler(callback)
     callback.message.edit_text.assert_called_once()
+    assert "топ" in callback.message.edit_text.call_args[0][0].lower() or "leaderboard" in callback.message.edit_text.call_args[0][0].lower()
     callback.answer.assert_called_once()
 
 
