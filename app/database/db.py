@@ -180,7 +180,12 @@ async def complete_training_session(session_id: int, correct: int, incorrect: in
         await session.commit()
 
 
+def _empty_diff() -> dict[str, int]:
+    return {"easy": 0, "medium": 0, "hard": 0}
+
+
 async def _get_difficulty_stats_map(session: AsyncSession) -> dict[int, dict[str, int]]:
+    """Правильные ответы по сложности (для взвешенного счёта)."""
     stmt = (
         select(User.id, TrainingSession.difficulty, func.sum(TrainingSession.correct).label("correct_sum"))
         .select_from(User)
@@ -193,11 +198,27 @@ async def _get_difficulty_stats_map(session: AsyncSession) -> dict[int, dict[str
     out: dict[int, dict[str, int]] = {}
     for user_id, difficulty, correct_sum in rows:
         if user_id not in out:
-            out[user_id] = {"easy": 0, "medium": 0, "hard": 0}
-        if difficulty in out[user_id]:
-            out[user_id][difficulty] = int(correct_sum or 0)
-        else:
-            out[user_id][difficulty] = int(correct_sum or 0)
+            out[user_id] = _empty_diff().copy()
+        out[user_id][difficulty] = int(correct_sum or 0)
+    return out
+
+
+async def _get_difficulty_totals_map(session: AsyncSession) -> dict[int, dict[str, int]]:
+    """Всего решённых задач по сложности (total_problems по сессиям). Сумма лёгк+ср+сл = total_problems_solved."""
+    stmt = (
+        select(User.id, TrainingSession.difficulty, func.sum(TrainingSession.total_problems).label("total"))
+        .select_from(User)
+        .join(TrainingSession, User.id == TrainingSession.user_id)
+        .where(TrainingSession.completed == True)
+        .group_by(User.id, TrainingSession.difficulty)
+    )
+    result = await session.execute(stmt)
+    rows = result.all()
+    out: dict[int, dict[str, int]] = {}
+    for user_id, difficulty, total in rows:
+        if user_id not in out:
+            out[user_id] = _empty_diff().copy()
+        out[user_id][difficulty] = int(total or 0)
     return out
 
 
@@ -235,10 +256,10 @@ async def get_top_users_by_streak(limit: int = 10) -> list[tuple[User, int, dict
         )
         result = await session.execute(stmt)
         users = result.scalars().all()
-        diff_map = await _get_difficulty_stats_map(session)
+        totals_map = await _get_difficulty_totals_map(session)
         out = []
         for user in users[:limit]:
-            stats = diff_map.get(user.id, {"easy": 0, "medium": 0, "hard": 0})
+            stats = totals_map.get(user.id, _empty_diff())
             out.append((user, user.max_streak, stats))
         return out
 
@@ -252,9 +273,9 @@ async def get_top_users_by_solved(limit: int = 10) -> list[tuple[User, int, dict
         )
         result = await session.execute(stmt)
         users = result.scalars().all()
-        diff_map = await _get_difficulty_stats_map(session)
+        totals_map = await _get_difficulty_totals_map(session)
         return [
-            (u, u.total_problems_solved, diff_map.get(u.id, {"easy": 0, "medium": 0, "hard": 0}))
+            (u, u.total_problems_solved, totals_map.get(u.id, _empty_diff()))
             for u in users[:limit]
         ]
 
@@ -272,12 +293,12 @@ async def get_top_users_by_accuracy(limit: int = 10) -> list[tuple[User, float, 
         )
         result = await session.execute(stmt)
         users = result.scalars().all()
-        diff_map = await _get_difficulty_stats_map(session)
+        totals_map = await _get_difficulty_totals_map(session)
         out = []
         for user in users[:limit]:
             total = user.correct_answers + user.incorrect_answers
             acc = round((user.correct_answers / total * 100), 1) if total else 0.0
-            stats = diff_map.get(user.id, {"easy": 0, "medium": 0, "hard": 0})
+            stats = totals_map.get(user.id, _empty_diff())
             out.append((user, acc, stats))
         return out
 
@@ -291,19 +312,21 @@ def _weighted_score(stats: dict[str, int]) -> int:
 
 
 async def get_top_users_by_weighted(limit: int = 10) -> list[tuple[User, int, dict[str, int]]]:
+    """Очки по правильным; в строке отображаем всего решено по сложности."""
     async with async_session_maker() as session:
-        diff_map = await _get_difficulty_stats_map(session)
-        stmt = select(User).where(User.id.in_(list(diff_map.keys())))
+        correct_map = await _get_difficulty_stats_map(session)
+        totals_map = await _get_difficulty_totals_map(session)
+        stmt = select(User).where(User.id.in_(list(correct_map.keys())))
         result = await session.execute(stmt)
         users_by_id = {u.id: u for u in result.scalars().all()}
-        # Сортировка: очки (убыв.), решённых (убыв.), id (возр.) для стабильного порядка
         rows = []
-        for uid in diff_map:
+        for uid in correct_map:
             u = users_by_id.get(uid)
             if not u:
                 continue
-            score = _weighted_score(diff_map[uid])
-            rows.append((u, score, diff_map[uid]))
+            score = _weighted_score(correct_map[uid])
+            totals = totals_map.get(uid, _empty_diff())
+            rows.append((u, score, totals))
         rows.sort(key=lambda r: (-r[1], -r[0].total_problems_solved, r[0].id))
         return rows[:limit]
 

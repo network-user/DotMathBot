@@ -61,7 +61,7 @@ class StatsService:
         if not top_users:
             return get_text("leaderboard_empty", lang)
 
-        text = get_text(title_key, lang)
+        text = get_text(title_key, lang) + get_text("leaderboard_legend", lang)
         anonymous = get_text("leaderboard_anonymous", lang)
         for idx, (user, value, diff) in enumerate(top_users, 1):
             medal = "🥇" if idx == 1 else "🥈" if idx == 2 else "🥉" if idx == 3 else f"{idx}."
