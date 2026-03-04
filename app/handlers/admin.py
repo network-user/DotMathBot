@@ -90,8 +90,15 @@ async def admin_users_list_handler(callback: CallbackQuery) -> None:
 
     text = f"👥 **Список пользователей (смещение {offset}):**\n\n"
     for user in users:
-        username = f"@{user.username}" if user.username else "нет username"
-        text += f"• ID: `{user.telegram_id}` | {user.first_name or ''} ({username})\n"
+        raw_first_name = user.first_name or ""
+        raw_username = user.username or "нет username"
+        
+        # Экранируем Markdown спецсимволы
+        safe_first_name = raw_first_name.replace("_", "\\_").replace("*", "\\*").replace("`", "\\`")
+        safe_username = raw_username.replace("_", "\\_").replace("*", "\\*").replace("`", "\\`")
+        
+        prefix = f"@{safe_username}" if user.username else safe_username
+        text += f"• ID: `{user.telegram_id}` | {safe_first_name} ({prefix})\n"
     
     has_next = len(users) == limit
     await callback.message.edit_text(
