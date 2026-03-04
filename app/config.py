@@ -18,3 +18,11 @@ DATABASE_URL: str = os.getenv(
 DB_PATH: Path = BASE_DIR / "app" / "data"
 
 DEBUG: bool = os.getenv("DEBUG", "False").lower() == "true"
+
+ADMIN_IDS: list[int] = [
+    int(x.strip())
+    for x in os.getenv("ADMIN_IDS", "").split(",")
+    if x.strip().isdigit()
+]
+
+ADMIN_BACKUP_PASSWORD: str = os.getenv("ADMIN_BACKUP_PASSWORD", "secret_pass_123")

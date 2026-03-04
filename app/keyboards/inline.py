@@ -27,6 +27,32 @@ class InlineKeyboards:
         return InlineKeyboardMarkup(inline_keyboard=buttons)
 
     @staticmethod
+    def admin_main_menu() -> InlineKeyboardMarkup:
+        buttons = [
+            [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")],
+            [InlineKeyboardButton(text="👥 Список пользователей", callback_data="admin_users:0")],
+            [InlineKeyboardButton(text="💾 Создать бэкап", callback_data="admin_backup")],
+            [InlineKeyboardButton(text="📂 Скачать бэкап", callback_data="admin_download_backup")],
+            [InlineKeyboardButton(text="🏠 В главное меню", callback_data="back_to_menu")],
+        ]
+        return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+    @staticmethod
+    def admin_users_list(offset: int, has_next: bool) -> InlineKeyboardMarkup:
+        buttons = []
+        nav_buttons = []
+        if offset > 0:
+            nav_buttons.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=f"admin_users:{max(0, offset-10)}"))
+        if has_next:
+            nav_buttons.append(InlineKeyboardButton(text="Вперед ➡️", callback_data=f"admin_users:{offset+10}"))
+        
+        if nav_buttons:
+            buttons.append(nav_buttons)
+            
+        buttons.append([InlineKeyboardButton(text="🔙 В админ-меню", callback_data="admin_main")])
+        return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+    @staticmethod
     def difficulty_selection(lang: str = "ru") -> InlineKeyboardMarkup:
         keys = {
             Difficulty.EASY: "difficulty_easy",
@@ -159,9 +185,13 @@ class InlineKeyboards:
         return InlineKeyboardMarkup(inline_keyboard=buttons)
 
     @staticmethod
-    def back_to_menu(lang: str = "ru") -> InlineKeyboardMarkup:
+    def back_to_menu(lang: str = "ru", show_in_top: bool = True) -> InlineKeyboardMarkup:
+        toggle_text = "👤 Скрыть имя в топе" if show_in_top else "👤 Показать имя в топе"
+        toggle_data = "toggle_top_privacy"
+        
         return InlineKeyboardMarkup(
             inline_keyboard=[
+                [InlineKeyboardButton(text=toggle_text, callback_data=toggle_data)],
                 [
                     InlineKeyboardButton(
                         text=get_text("btn_back_to_menu", lang),
@@ -172,12 +202,23 @@ class InlineKeyboards:
         )
 
     @staticmethod
-    def leaderboard_mode_choice(lang: str = "ru") -> InlineKeyboardMarkup:
+    def leaderboard_mode_choice(lang: str = "ru", mode: str | None = None, offset: int = 0, has_next: bool = False) -> InlineKeyboardMarkup:
         buttons = [
-            [InlineKeyboardButton(text=get_text("btn_leaderboard_streak", lang), callback_data="leaderboard_streak")],
-            [InlineKeyboardButton(text=get_text("btn_leaderboard_solved", lang), callback_data="leaderboard_solved")],
-            [InlineKeyboardButton(text=get_text("btn_leaderboard_accuracy", lang), callback_data="leaderboard_accuracy")],
-            [InlineKeyboardButton(text=get_text("btn_leaderboard_weighted", lang), callback_data="leaderboard_weighted")],
-            [InlineKeyboardButton(text=get_text("btn_back_to_menu", lang), callback_data="back_to_menu")],
+            [InlineKeyboardButton(text=get_text("btn_leaderboard_streak", lang), callback_data="leaderboard_streak:0")],
+            [InlineKeyboardButton(text=get_text("btn_leaderboard_solved", lang), callback_data="leaderboard_solved:0")],
+            [InlineKeyboardButton(text=get_text("btn_leaderboard_accuracy", lang), callback_data="leaderboard_accuracy:0")],
+            [InlineKeyboardButton(text=get_text("btn_leaderboard_weighted", lang), callback_data="leaderboard_weighted:0")],
         ]
+        
+        if mode:
+            nav_row = []
+            if offset > 0:
+                nav_row.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=f"leaderboard_{mode}:{max(0, offset-10)}"))
+            if has_next:
+                nav_row.append(InlineKeyboardButton(text="Вперед ➡️", callback_data=f"leaderboard_{mode}:{offset+10}"))
+            
+            if nav_row:
+                buttons.append(nav_row)
+
+        buttons.append([InlineKeyboardButton(text=get_text("btn_back_to_menu", lang), callback_data="back_to_menu")])
         return InlineKeyboardMarkup(inline_keyboard=buttons)

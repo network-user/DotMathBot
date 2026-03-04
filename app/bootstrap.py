@@ -12,7 +12,8 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from app.config import BOT_TOKEN, DEBUG
 from app.database.db import init_db
-from app.handlers import start, training, profile, notifications
+from app.handlers import start, training, profile, notifications, admin
+from app.services.backup_service import BackupService
 from app.utils.set_commands import set_bot_commands
 from app.services.notification_service import NotificationService
 from app.services.notification_loader import load_scheduled_users
@@ -27,6 +28,7 @@ class App(NamedTuple):
     bot: Bot
     dp: Dispatcher
     notification_service: NotificationService
+    backup_service: BackupService
 
 
 async def setup_app() -> App:
@@ -50,11 +52,16 @@ async def setup_app() -> App:
     await load_scheduled_users(bot, notification_service)
     await set_bot_commands(bot)
 
+    logger.info("Initializing BackupService...")
+    backup_service = BackupService(bot)
+    backup_service.start()
+
     logger.info("Registering handlers...")
     dp.include_router(start.router)
     dp.include_router(training.router)
     dp.include_router(profile.router)
     dp.include_router(notifications.router)
+    dp.include_router(admin.router)
     logger.info("Handlers registered successfully")
 
     logger.info(
@@ -62,7 +69,7 @@ async def setup_app() -> App:
         notification_service.get_all_jobs_count(),
     )
 
-    return App(bot=bot, dp=dp, notification_service=notification_service)
+    return App(bot=bot, dp=dp, notification_service=notification_service, backup_service=backup_service)
 
 
 async def run_app(app: App) -> None:
@@ -76,5 +83,6 @@ async def run_app(app: App) -> None:
     finally:
         logger.info("Shutting down bot...")
         app.notification_service.shutdown()
+        app.backup_service.scheduler.shutdown()
         await app.bot.session.close()
         logger.info("Bot stopped")
