@@ -67,7 +67,7 @@ async def admin_stats_handler(callback: CallbackQuery) -> None:
         f"• Всего: `{total_users}`\n"
         f"• Новых за сегодня: `{new_today}`\n"
         f"• Новых за неделю: `{new_week}`"
-    )
+    ).replace("**3", "^3") # Избегаем конфликта с Markdown bold
 
     await callback.message.edit_text(
         stats_text,
@@ -144,13 +144,24 @@ async def admin_download_backup_process(message: Message, state: FSMContext) -> 
         backup_service = BackupService(message.bot)
         
         await message.answer("🔄 Создаю свежий бэкап и подготавливаю файл...")
-        backup_path = await backup_service.create_backup()
-        
-        if backup_path and os.path.exists(backup_path):
-            document = FSInputFile(backup_path)
-            await message.bot.send_document(message.chat.id, document, caption=f"💾 Резервная копия от {os.path.basename(backup_path)}")
-        else:
-            await message.answer("❌ Ошибка при создании файла бэкапа.")
+        try:
+            backup_path = await backup_service.create_backup()
+            
+            if backup_path:
+                # Конвертируем в строку для документов и Path методов
+                path_str = str(backup_path)
+                filename = os.path.basename(path_str)
+                
+                document = FSInputFile(path_str)
+                await message.bot.send_document(
+                    message.chat.id, 
+                    document, 
+                    caption=f"💾 Резервная копия от {filename}"
+                )
+            else:
+                await message.answer("❌ Ошибка при создании файла бэкапа. Проверьте логи сервера.")
+        except Exception as e:
+            await message.answer(f"❌ Критическая ошибка при бэкапе: `{str(e)}`", parse_mode="Markdown")
     else:
         await message.answer("❌ Неверный пароль. Доступ отклонен.")
     
