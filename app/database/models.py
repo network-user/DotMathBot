@@ -29,6 +29,8 @@ class User(Base):
 
     language = Column(String, default="ru", nullable=True)  # ru, en
 
+    show_in_top = Column(Boolean, default=False)
+
     notification_enabled = Column(Boolean, default=True)
     notification_preset = Column(String, default="three_times")  # morning, lunch, evening, three_times, custom, disabled
     custom_notification_times = Column(Text, default="")  # JSON string with times HH:MM,HH:MM,...

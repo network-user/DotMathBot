@@ -247,40 +247,54 @@ async def get_top_users(limit: int = 10) -> list[tuple[User, int]]:
     return [(u, value) for u, value, _ in top]
 
 
-async def get_top_users_by_streak(limit: int = 10) -> list[tuple[User, int, dict[str, int]]]:
+async def get_top_users_by_streak(limit: int = 10, offset: int = 0) -> tuple[list[tuple[User, int, dict[str, int]]], bool]:
     async with async_session_maker() as session:
         stmt = (
             select(User)
-            .order_by(desc(User.max_streak), desc(User.total_problems_solved), User.id)
-            .limit(limit * 2)
+            .order_by(desc(User.max_streak), desc(User.correct_answers), User.id)
+            .offset(offset)
+            .limit(limit + 1)
         )
         result = await session.execute(stmt)
-        users = result.scalars().all()
+        users = list(result.scalars().all())
+        
+        has_next = len(users) > limit
+        users = users[:limit]
+
         totals_map = await _get_difficulty_totals_map(session)
         out = []
-        for user in users[:limit]:
+        for user in users:
             stats = totals_map.get(user.id, _empty_diff())
             out.append((user, user.max_streak, stats))
-        return out
+        return out, has_next
 
 
 async def get_top_users_by_solved(limit: int = 10) -> list[tuple[User, int, dict[str, int]]]:
+            return out
+
+
+async def get_top_users_by_solved(limit: int = 10, offset: int = 0) -> tuple[list[tuple[User, int, dict[str, int]]], bool]:
     async with async_session_maker() as session:
         stmt = (
             select(User)
-            .order_by(desc(User.total_problems_solved), desc(User.correct_answers), User.id)
-            .limit(limit * 2)
+            .order_by(desc(User.correct_answers), desc(User.total_problems_solved), User.id)
+            .offset(offset)
+            .limit(limit + 1)
         )
         result = await session.execute(stmt)
-        users = result.scalars().all()
+        users = list(result.scalars().all())
+        
+        has_next = len(users) > limit
+        users = users[:limit]
+
         totals_map = await _get_difficulty_totals_map(session)
         return [
-            (u, u.total_problems_solved, totals_map.get(u.id, _empty_diff()))
-            for u in users[:limit]
-        ]
+            (u, u.correct_answers, totals_map.get(u.id, _empty_diff()))
+            for u in users
+        ], has_next
 
 
-async def get_top_users_by_accuracy(limit: int = 10) -> list[tuple[User, float, dict[str, int]]]:
+async def get_top_users_by_accuracy(limit: int = 10, offset: int = 0) -> tuple[list[tuple[User, float, dict[str, int]]], bool]:
     async with async_session_maker() as session:
         acc_expr = (User.correct_answers * 1.0) / func.nullif(
             User.correct_answers + User.incorrect_answers, 0
@@ -288,19 +302,24 @@ async def get_top_users_by_accuracy(limit: int = 10) -> list[tuple[User, float, 
         stmt = (
             select(User)
             .where(User.total_problems_solved >= 1)
-            .order_by(desc(acc_expr), desc(User.total_problems_solved), User.id)
-            .limit(limit * 2)
+            .order_by(desc(acc_expr), desc(User.correct_answers), User.id)
+            .offset(offset)
+            .limit(limit + 1)
         )
         result = await session.execute(stmt)
-        users = result.scalars().all()
+        users = list(result.scalars().all())
+        
+        has_next = len(users) > limit
+        users = users[:limit]
+
         totals_map = await _get_difficulty_totals_map(session)
         out = []
-        for user in users[:limit]:
+        for user in users:
             total = user.correct_answers + user.incorrect_answers
             acc = round((user.correct_answers / total * 100), 1) if total else 0.0
             stats = totals_map.get(user.id, _empty_diff())
             out.append((user, acc, stats))
-        return out
+        return out, has_next
 
 
 def _weighted_score(stats: dict[str, int]) -> int:
@@ -311,7 +330,7 @@ def _weighted_score(stats: dict[str, int]) -> int:
     )
 
 
-async def get_top_users_by_weighted(limit: int = 10) -> list[tuple[User, int, dict[str, int]]]:
+async def get_top_users_by_weighted(limit: int = 10, offset: int = 0) -> tuple[list[tuple[User, int, dict[str, int]]], bool]:
     """Очки по правильным; в строке отображаем всего решено по сложности."""
     async with async_session_maker() as session:
         correct_map = await _get_difficulty_stats_map(session)
@@ -327,8 +346,10 @@ async def get_top_users_by_weighted(limit: int = 10) -> list[tuple[User, int, di
             score = _weighted_score(correct_map[uid])
             totals = totals_map.get(uid, _empty_diff())
             rows.append((u, score, totals))
-        rows.sort(key=lambda r: (-r[1], -r[0].total_problems_solved, r[0].id))
-        return rows[:limit]
+        rows.sort(key=lambda r: (-r[1], -r[0].correct_answers, r[0].id))
+        
+        has_next = len(rows) > (offset + limit)
+        return rows[offset:offset+limit], has_next
 
 
 async def get_user_rank(
@@ -392,5 +413,38 @@ async def get_user_stats(telegram_id: int) -> dict:
         "total": user.total_problems_solved,
         "current_streak": user.current_streak,
         "max_streak": user.max_streak,
-        "last_training": user.last_training_date
+        "last_training": user.last_training_date,
+        "show_in_top": user.show_in_top
     }
+
+
+async def update_user_show_in_top(telegram_id: int, value: bool) -> None:
+    async with async_session_maker() as session:
+        stmt = select(User).where(User.telegram_id == str(telegram_id))
+        result = await session.execute(stmt)
+        user = result.scalar_one_or_none()
+        if user:
+            user.show_in_top = value
+            await session.commit()
+
+
+async def get_total_users_count() -> int:
+    async with async_session_maker() as session:
+        stmt = select(func.count(User.id))
+        result = await session.execute(stmt)
+        return result.scalar() or 0
+
+
+async def get_new_users_count(days: int = 1) -> int:
+    async with async_session_maker() as session:
+        since = datetime.utcnow() - timedelta(days=days)
+        stmt = select(func.count(User.id)).where(User.created_at >= since)
+        result = await session.execute(stmt)
+        return result.scalar() or 0
+
+
+async def get_all_users_paginated(limit: int = 10, offset: int = 0) -> list[User]:
+    async with async_session_maker() as session:
+        stmt = select(User).order_by(desc(User.created_at)).offset(offset).limit(limit)
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
