@@ -83,7 +83,7 @@ class StatsService:
             if not user.show_in_top:
                 name = f"_{hidden_label}_"
             else:
-                name = user.first_name or user.username or anonymous
+                name = (user.first_name or user.username or anonymous).replace("_", "\\_").replace("*", "\\*")
             
             text += get_text(row_key, lang).format(
                 medal=medal,
