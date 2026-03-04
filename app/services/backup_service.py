@@ -14,19 +14,26 @@ class BackupService:
     def __init__(self, bot: Bot):
         self.bot = bot
         self.scheduler = AsyncIOScheduler()
-        self.backups_dir = os.path.join(DB_PATH, "backups")
-        os.makedirs(self.backups_dir, exist_ok=True)
+        # Использование Path для надежности
+        from pathlib import Path
+        self.db_dir = Path(DB_PATH)
+        self.backups_dir = self.db_dir / "backups"
+        
+        try:
+            self.backups_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            logger.error("Could not create backups directory %s: %s", self.backups_dir, e)
 
     async def create_backup(self):
         """Создает резервную копию базы данных."""
-        db_file = os.path.join(DB_PATH, "bot.db")
-        if not os.path.exists(db_file):
+        db_file = self.db_dir / "bot.db"
+        if not db_file.exists():
             logger.error("DB file not found at %s", db_file)
-            return
+            return None
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_name = f"bot_backup_{timestamp}.db"
-        backup_path = os.path.join(self.backups_dir, backup_name)
+        backup_path = self.backups_dir / backup_name
 
         try:
             shutil.copy2(db_file, backup_path)
