@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 from typing import Optional
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy import select, func, desc
@@ -15,11 +16,22 @@ engine = create_async_engine(DATABASE_URL, echo=False)
 async_session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 logger = logging.getLogger(__name__)
 
+
 async def init_db() -> None:
+    """Apply Alembic migrations to bring the schema to the latest revision."""
     DB_PATH.mkdir(parents=True, exist_ok=True)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    logger.debug("Database schema created/verified at %s", DB_PATH)
+
+    from alembic import command
+    from alembic.config import Config
+
+    config_path = Path(__file__).resolve().parents[2] / "alembic.ini"
+    cfg = Config(str(config_path))
+    cfg.set_main_option("sqlalchemy.url", DATABASE_URL)
+
+    import asyncio
+
+    await asyncio.to_thread(command.upgrade, cfg, "head")
+    logger.info("Database schema upgraded to head")
 
 
 async def get_session() -> AsyncSession:
@@ -243,8 +255,8 @@ async def get_user_difficulty_stats(telegram_id: int) -> dict[str, int]:
 
 
 async def get_top_users(limit: int = 10) -> list[tuple[User, int]]:
-    top = await get_top_users_by_streak(limit)
-    return [(u, value) for u, value, _ in top]
+    top, _has_next = await get_top_users_by_streak(limit)
+    return [(u, value) for u, value, _stats in top]
 
 
 async def get_top_users_by_streak(limit: int = 10, offset: int = 0) -> tuple[list[tuple[User, int, dict[str, int]]], bool]:
@@ -267,10 +279,6 @@ async def get_top_users_by_streak(limit: int = 10, offset: int = 0) -> tuple[lis
             stats = totals_map.get(user.id, _empty_diff())
             out.append((user, user.max_streak, stats))
         return out, has_next
-
-
-async def get_top_users_by_solved(limit: int = 10) -> list[tuple[User, int, dict[str, int]]]:
-            return out
 
 
 async def get_top_users_by_solved(limit: int = 10, offset: int = 0) -> tuple[list[tuple[User, int, dict[str, int]]], bool]:
@@ -437,7 +445,7 @@ async def get_total_users_count() -> int:
 
 async def get_new_users_count(days: int = 1) -> int:
     async with async_session_maker() as session:
-        since = datetime.utcnow() - timedelta(days=days)
+        since = datetime.now(timezone.utc) - timedelta(days=days)
         stmt = select(func.count(User.id)).where(User.created_at >= since)
         result = await session.execute(stmt)
         return result.scalar() or 0

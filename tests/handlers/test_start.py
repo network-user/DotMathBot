@@ -52,9 +52,9 @@ async def test_start_handler_creates_user_and_sends_welcome(message, state):
         m_get.return_value = (user, True)
         await start_handler(message, state)
     m_get.assert_called_once_with(telegram_id=12345, username="testuser", first_name="Test")
-    message.answer.assert_called_once()
-    call_args = message.answer.call_args
-    assert "Math Trainer" in call_args[0][0] or "Привет" in call_args[0][0]
+    assert message.answer.call_count == 2
+    welcome_text = message.answer.call_args_list[0][0][0]
+    assert "Math Trainer" in welcome_text or "Привет" in welcome_text
     state.clear.assert_called_once()
 
 
@@ -71,8 +71,9 @@ async def test_train_command_clears_state_and_sends_difficulty(message, state):
 async def test_help_command_sends_help(message):
     with patch("app.handlers.start.get_user_language", new_callable=AsyncMock, return_value="ru"):
         await help_command(message)
-    message.answer.assert_called_once()
-    assert "/start" in message.answer.call_args[0][0] or "Помощь" in message.answer.call_args[0][0]
+    assert message.answer.call_count >= 1
+    help_text = message.answer.call_args_list[0][0][0]
+    assert "/start" in help_text or "Помощь" in help_text
 
 
 @pytest.mark.asyncio

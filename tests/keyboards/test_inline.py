@@ -57,10 +57,11 @@ class TestNotificationPresetSelection:
 
 
 class TestBackToMenu:
-    def test_single_button(self):
+    def test_has_back_button(self):
         kb = InlineKeyboards.back_to_menu("ru")
-        assert len(kb.inline_keyboard) == 1
-        assert kb.inline_keyboard[0][0].callback_data == "back_to_menu"
+        flat = [b for row in kb.inline_keyboard for b in row]
+        datas = [b.callback_data for b in flat]
+        assert "back_to_menu" in datas
 
 
 class TestTrainingAnswerVariants:

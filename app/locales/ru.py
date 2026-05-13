@@ -31,6 +31,11 @@ TEXTS = {
     "mode_mult": "Только умножение",
     "mode_div": "Только деление",
     "mode_mixed": "Смешанный режим",
+    "mode_add": "Только сложение",
+    "mode_sub": "Только вычитание",
+    "mode_div_rem": "Деление с остатком",
+    "mode_pow": "Степени",
+    "mode_sqrt": "Квадратные корни",
     "profile_not_found": "📊 Профиль не найден",
     "profile_title": "👤 **ВАШ ПРОФИЛЬ**\n\n",
     "profile_stats": "📈 Статистика:\n",
@@ -72,8 +77,6 @@ TEXTS = {
     "notify_preset_disabled": "❌ Отключено",
     "notifications_set": "✅ Уведомления установлены: {name}\n\nВремя: {times}",
     "notifications_disabled": "❌ Уведомления отключены",
-    "custom_time_unavailable": "🕒 **Кастомное время**\n\n⚠️ Функция находится в разработке.\nПока выбери один из готовых пресетов.",
-    "feature_unavailable": "Функция пока недоступна",
     "preset_config_error": "⚠️ **Ошибка:** Для пресета {name} не заданы времена.",
     "notification_error": "⚠️ **Ошибка при настройке уведомлений.** Попробуйте позже.",
     "current_notifications": "✅ **Текущие настройки**\n\nПресет: {name}\nВремя: {times}\nСтатус: Включено",
@@ -129,4 +132,32 @@ TEXTS = {
     "custom_time_cancelled": "❌ Настройка кастомного времени отменена.",
 
     "btn_cancel": "❌ Отменить",
+    "internal_error": "⚠️ Внутренняя ошибка. Мы уже знаем, попробуй позже.",
+    "admin_panel_title": "🛠 **Панель администратора**\n\nВыберите действие:",
+    "admin_no_rights": "У вас нет прав!",
+    "admin_btn_stats": "📊 Статистика",
+    "admin_btn_users": "👥 Список пользователей",
+    "admin_btn_backup": "💾 Создать бэкап",
+    "admin_btn_download_backup": "📂 Скачать бэкап",
+    "admin_btn_back_to_main": "🔙 В админ-меню",
+    "admin_stats_template": (
+        "📊 **Статистика бота**\n\n"
+        "🖥 **Сервер:**\n"
+        "• CPU: `{cpu}%`\n"
+        "• RAM: `{ram_pct}%` ({ram_used} GB / {ram_total} GB)\n\n"
+        "👥 **Пользователи:**\n"
+        "• Всего: `{total}`\n"
+        "• Новых за сегодня: `{new_today}`\n"
+        "• Новых за неделю: `{new_week}`"
+    ),
+    "admin_users_empty": "Пользователей пока нет.",
+    "admin_users_header": "👥 **Список пользователей** (страница {page})\n\n",
+    "admin_users_no_username": "нет username",
+    "admin_backup_prompt": "⌨️ Введите пароль для выгрузки бэкапа:",
+    "admin_backup_creating": "🔄 Создаю свежий бэкап и подготавливаю файл...",
+    "admin_backup_caption": "💾 Резервная копия: {filename}",
+    "admin_backup_file_error": "❌ Ошибка при создании файла бэкапа. Проверьте логи сервера.",
+    "admin_backup_critical_error": "❌ Критическая ошибка при бэкапе: `{error}`",
+    "admin_backup_wrong_password": "❌ Неверный пароль. Доступ отклонен.",
+    "admin_backup_ok": "Бэкап успешно создан!",
 }

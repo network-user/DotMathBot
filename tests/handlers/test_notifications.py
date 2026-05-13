@@ -29,18 +29,22 @@ async def test_settings_notifications_handler(callback):
 @pytest.mark.asyncio
 async def test_notify_preset_handler_disabled(callback):
     callback.data = "notify_preset_disabled"
+    notification_service = MagicMock()
     with patch("app.handlers.notifications.get_user_language", new_callable=AsyncMock, return_value="ru"), \
          patch("app.handlers.notifications.update_user_notifications", new_callable=AsyncMock):
-        await notify_preset_handler(callback, MagicMock())
+        await notify_preset_handler(callback, MagicMock(), notification_service)
     callback.message.edit_text.assert_called_once()
     callback.answer.assert_called_once()
+    notification_service.unschedule_user.assert_called_once_with(callback.from_user.id)
 
 
 @pytest.mark.asyncio
 async def test_notify_preset_handler_morning(callback):
     callback.data = "notify_preset_morning"
+    notification_service = MagicMock()
     with patch("app.handlers.notifications.get_user_language", new_callable=AsyncMock, return_value="ru"), \
          patch("app.handlers.notifications.update_user_notifications", new_callable=AsyncMock):
-        await notify_preset_handler(callback, MagicMock())
+        await notify_preset_handler(callback, MagicMock(), notification_service)
     callback.message.edit_text.assert_called_once()
     callback.answer.assert_called_once()
+    notification_service.schedule_user.assert_called_once()

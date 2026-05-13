@@ -10,8 +10,9 @@ from aiogram.fsm.context import FSMContext
 from app.keyboards.inline import InlineKeyboards
 from app.database.db import update_user_notifications, get_user_language, get_user
 from app.locales import get_text
-from app.utils.constants import NotificationPreset, NOTIFICATION_PRESETS
 from app.services.notification_callback import send_training_reminder
+from app.services.notification_service import NotificationService
+from app.utils.constants import NotificationPreset, NOTIFICATION_PRESETS
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -33,7 +34,11 @@ async def settings_notifications_handler(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data.startswith("notify_preset_"))
-async def notify_preset_handler(callback: CallbackQuery, state: FSMContext) -> None:
+async def notify_preset_handler(
+    callback: CallbackQuery,
+    state: FSMContext,
+    notification_service: NotificationService,
+) -> None:
     preset_str = callback.data.split("_")[-1]
     preset = NotificationPreset(preset_str)
     lang = await get_user_language(callback.from_user.id)
@@ -54,34 +59,25 @@ async def notify_preset_handler(callback: CallbackQuery, state: FSMContext) -> N
     await update_user_notifications(callback.from_user.id, preset_str)
 
     try:
-        from app.context import get_notification_service
+        bot = callback.bot
 
-        try:
-            service = get_notification_service()
-        except RuntimeError:
-            logger.warning(f"NotificationService not available, only DB updated for user {callback.from_user.id}")
-            service = None
+        if preset == NotificationPreset.DISABLED:
+            notification_service.unschedule_user(callback.from_user.id)
+            logger.info(f"Notifications disabled for user {callback.from_user.id}")
+        else:
+            config = NOTIFICATION_PRESETS[preset]
 
-        if service:
-            bot = callback.bot
-
-            if preset == NotificationPreset.DISABLED:
-                service.unschedule_user(callback.from_user.id)
-                logger.info(f"Notifications disabled for user {callback.from_user.id}")
+            if not config["times"]:
+                text = get_text("preset_config_error", lang).format(name=config["name"])
+                logger.error(f"Preset {preset_str} has no times configured")
             else:
-                config = NOTIFICATION_PRESETS[preset]
-
-                if not config["times"]:
-                    text = get_text("preset_config_error", lang).format(name=config["name"])
-                    logger.error(f"Preset {preset_str} has no times configured")
-                else:
-                    callback_func = partial(send_training_reminder, bot)
-                    service.schedule_user(
-                        telegram_id=callback.from_user.id,
-                        times=config["times"],
-                        callback=callback_func,
-                    )
-                    logger.info(f"Scheduled {len(config['times'])} reminders for user {callback.from_user.id}")
+                callback_func = partial(send_training_reminder, bot)
+                notification_service.schedule_user(
+                    telegram_id=callback.from_user.id,
+                    times=config["times"],
+                    callback=callback_func,
+                )
+                logger.info(f"Scheduled {len(config['times'])} reminders for user {callback.from_user.id}")
 
         if preset == NotificationPreset.DISABLED:
             text = get_text("notifications_disabled", lang)
@@ -113,9 +109,11 @@ async def notify_preset_handler(callback: CallbackQuery, state: FSMContext) -> N
 
 
 @router.message(NotificationStates.waiting_for_custom_time)
-async def custom_time_input_handler(message: Message, state: FSMContext) -> None:
-    from app.context import get_notification_service
-
+async def custom_time_input_handler(
+    message: Message,
+    state: FSMContext,
+    notification_service: NotificationService,
+) -> None:
     lang = await get_user_language(message.from_user.id)
 
     times_input = message.text.strip()
@@ -140,11 +138,9 @@ async def custom_time_input_handler(message: Message, state: FSMContext) -> None
     )
 
     try:
-        service = get_notification_service()
         bot = message.bot
-
         callback_func = partial(send_training_reminder, bot)
-        service.schedule_user(
+        notification_service.schedule_user(
             telegram_id=message.from_user.id,
             times=parsed_times,
             callback=callback_func,

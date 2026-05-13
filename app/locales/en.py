@@ -31,6 +31,11 @@ TEXTS = {
     "mode_mult": "Multiplication only",
     "mode_div": "Division only",
     "mode_mixed": "Mixed mode",
+    "mode_add": "Addition only",
+    "mode_sub": "Subtraction only",
+    "mode_div_rem": "Division with remainder",
+    "mode_pow": "Powers",
+    "mode_sqrt": "Square roots",
     "profile_not_found": "📊 Profile not found",
     "profile_title": "👤 **YOUR PROFILE**\n\n",
     "profile_stats": "📈 Stats:\n",
@@ -72,8 +77,6 @@ TEXTS = {
     "notify_preset_disabled": "❌ Disabled",
     "notifications_set": "✅ Notifications set: {name}\n\nTime: {times}",
     "notifications_disabled": "❌ Notifications disabled",
-    "custom_time_unavailable": "🕒 **Custom Time**\n\n⚠️ Feature under development.\nPlease choose one of the preset options.",
-    "feature_unavailable": "Feature not available yet",
     "preset_config_error": "⚠️ **Error:** No times configured for preset {name}.",
     "notification_error": "⚠️ **Error configuring notifications.** Please try again later.",
     "current_notifications": "✅ **Current Settings**\n\nPreset: {name}\nTime: {times}\nStatus: Enabled",
@@ -129,4 +132,32 @@ TEXTS = {
     "custom_time_cancelled": "❌ Custom time setup cancelled.",
 
     "btn_cancel": "❌ Cancel",
+    "internal_error": "⚠️ Internal error. We're on it — please try again later.",
+    "admin_panel_title": "🛠 **Admin panel**\n\nChoose an action:",
+    "admin_no_rights": "You don't have permission!",
+    "admin_btn_stats": "📊 Statistics",
+    "admin_btn_users": "👥 Users list",
+    "admin_btn_backup": "💾 Create backup",
+    "admin_btn_download_backup": "📂 Download backup",
+    "admin_btn_back_to_main": "🔙 Back to admin menu",
+    "admin_stats_template": (
+        "📊 **Bot statistics**\n\n"
+        "🖥 **Server:**\n"
+        "• CPU: `{cpu}%`\n"
+        "• RAM: `{ram_pct}%` ({ram_used} GB / {ram_total} GB)\n\n"
+        "👥 **Users:**\n"
+        "• Total: `{total}`\n"
+        "• New today: `{new_today}`\n"
+        "• New this week: `{new_week}`"
+    ),
+    "admin_users_empty": "No users yet.",
+    "admin_users_header": "👥 **Users list** (page {page})\n\n",
+    "admin_users_no_username": "no username",
+    "admin_backup_prompt": "⌨️ Enter password to download backup:",
+    "admin_backup_creating": "🔄 Creating a fresh backup and preparing the file...",
+    "admin_backup_caption": "💾 Backup file: {filename}",
+    "admin_backup_file_error": "❌ Failed to create backup file. Check server logs.",
+    "admin_backup_critical_error": "❌ Critical error during backup: `{error}`",
+    "admin_backup_wrong_password": "❌ Wrong password. Access denied.",
+    "admin_backup_ok": "Backup created successfully!",
 }

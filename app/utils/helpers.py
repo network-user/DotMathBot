@@ -1,5 +1,5 @@
 from typing import Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 
 def format_time(dt: datetime) -> str:
@@ -10,7 +10,7 @@ def get_streak_status(last_training_date: Optional[datetime]) -> tuple[bool, int
     if not last_training_date:
         return False, 0
 
-    today = datetime.now().date()
+    today = datetime.now(timezone.utc).date()
     last_date = last_training_date.date()
     days_diff = (today - last_date).days
 

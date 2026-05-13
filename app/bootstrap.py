@@ -1,7 +1,4 @@
-"""
-Bot setup and run: initializes DB, bot, dispatcher, notification service, and handlers.
-Keeps main.py minimal.
-"""
+"""Bot setup and run: initializes DB, bot, dispatcher, services, handlers."""
 from __future__ import annotations
 
 import logging
@@ -10,21 +7,19 @@ from typing import NamedTuple
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from app.config import BOT_TOKEN, DEBUG
+from app.config import BOT_TOKEN
 from app.database.db import init_db
 from app.handlers import start, training, profile, notifications, admin
+from app.middlewares.error_middleware import ErrorMiddleware
 from app.services.backup_service import BackupService
-from app.utils.set_commands import set_bot_commands
-from app.services.notification_service import NotificationService
 from app.services.notification_loader import load_scheduled_users
-from app.context import set_notification_service
+from app.services.notification_service import NotificationService
+from app.utils.set_commands import set_bot_commands
 
 logger = logging.getLogger(__name__)
 
 
 class App(NamedTuple):
-    """Holds bot, dispatcher and notification service after setup."""
-
     bot: Bot
     dp: Dispatcher
     notification_service: NotificationService
@@ -32,10 +27,6 @@ class App(NamedTuple):
 
 
 async def setup_app() -> App:
-    """
-    Initialize database, create bot and dispatcher, start notification service,
-    load scheduled users, set commands, register handlers.
-    """
     logger.info("Initializing database...")
     await init_db()
     logger.info("Database initialized successfully")
@@ -47,7 +38,9 @@ async def setup_app() -> App:
     logger.info("Initializing NotificationService...")
     notification_service = NotificationService(timezone="Europe/Moscow")
     notification_service.start()
-    set_notification_service(notification_service)
+
+    # DI: services flow to handlers via dispatcher workflow data.
+    dp["notification_service"] = notification_service
 
     await load_scheduled_users(bot, notification_service)
     await set_bot_commands(bot)
@@ -55,6 +48,8 @@ async def setup_app() -> App:
     logger.info("Initializing BackupService...")
     backup_service = BackupService(bot)
     backup_service.start()
+
+    dp.update.middleware(ErrorMiddleware())
 
     logger.info("Registering handlers...")
     dp.include_router(start.router)
@@ -73,7 +68,6 @@ async def setup_app() -> App:
 
 
 async def run_app(app: App) -> None:
-    """Start polling and run until stopped. Cleans up on exit."""
     try:
         logger.info("Bot started and listening for updates...")
         await app.dp.start_polling(

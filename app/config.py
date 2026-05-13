@@ -7,14 +7,18 @@ load_dotenv()
 BASE_DIR = Path(__file__).parent.parent
 
 BOT_TOKEN: str = os.getenv("BOT_TOKEN", "")
-
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN is not set in the .env file")
 
-DATABASE_URL: str = os.getenv(
-    "DATABASE_URL",
-    f"sqlite+aiosqlite:///{BASE_DIR / 'app' / 'data' / 'bot.db'}".replace("\\", "/"),
-)
+DATABASE_URL: str = os.getenv("DATABASE_URL", "")
+if not DATABASE_URL:
+    raise ValueError(
+        "DATABASE_URL is not set. Example: "
+        "postgresql+asyncpg://dotmath:password@localhost:5432/dotmath"
+    )
+
+# Filesystem path used by services like BackupService and Alembic for ensuring
+# the data directory exists. Not used for DB connection any more.
 DB_PATH: Path = BASE_DIR / "app" / "data"
 
 DEBUG: bool = os.getenv("DEBUG", "False").lower() == "true"
@@ -25,4 +29,6 @@ ADMIN_IDS: list[int] = [
     if x.strip().isdigit()
 ]
 
-ADMIN_BACKUP_PASSWORD: str = os.getenv("ADMIN_BACKUP_PASSWORD", "secret_pass_123")
+ADMIN_BACKUP_PASSWORD: str = os.getenv("ADMIN_BACKUP_PASSWORD", "")
+if not ADMIN_BACKUP_PASSWORD:
+    raise ValueError("ADMIN_BACKUP_PASSWORD is not set in the .env file")

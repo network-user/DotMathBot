@@ -1,130 +1,158 @@
 import logging
-import psutil
 import os
-from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+
+import psutil
+from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import FSInputFile
+from aiogram.types import CallbackQuery, FSInputFile, Message
 
-from app.config import ADMIN_IDS, DB_PATH, ADMIN_BACKUP_PASSWORD
+from app.config import ADMIN_BACKUP_PASSWORD, ADMIN_IDS
+from app.database.db import (
+    get_all_users_paginated,
+    get_new_users_count,
+    get_total_users_count,
+    get_user_language,
+)
 from app.keyboards.inline import InlineKeyboards
-from app.database.db import get_total_users_count, get_new_users_count, get_all_users_paginated
+from app.locales import get_text
+
 
 class AdminStates(StatesGroup):
     wait_backup_password = State()
 
+
 router = Router()
 logger = logging.getLogger(__name__)
 
+
 def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
+
+
+def _escape_md(value: str) -> str:
+    return value.replace("_", "\\_").replace("*", "\\*").replace("`", "\\`")
+
 
 @router.message(Command("admin"))
 async def admin_panel_handler(message: Message) -> None:
     if not is_admin(message.from_user.id):
         return
 
+    lang = await get_user_language(message.from_user.id)
     await message.answer(
-        "🛠 **Панель администратора**\n\nВыберите действие:",
-        reply_markup=InlineKeyboards.admin_main_menu(),
-        parse_mode="Markdown"
+        get_text("admin_panel_title", lang),
+        reply_markup=InlineKeyboards.admin_main_menu(lang),
+        parse_mode="Markdown",
     )
+
 
 @router.callback_query(F.data == "admin_main")
 async def admin_main_callback(callback: CallbackQuery) -> None:
+    lang = await get_user_language(callback.from_user.id)
     if not is_admin(callback.from_user.id):
-        await callback.answer("У вас нет прав!", show_alert=True)
+        await callback.answer(get_text("admin_no_rights", lang), show_alert=True)
         return
 
     await callback.message.edit_text(
-        "🛠 **Панель администратора**\n\nВыберите действие:",
-        reply_markup=InlineKeyboards.admin_main_menu(),
-        parse_mode="Markdown"
+        get_text("admin_panel_title", lang),
+        reply_markup=InlineKeyboards.admin_main_menu(lang),
+        parse_mode="Markdown",
     )
+
 
 @router.callback_query(F.data == "admin_stats")
 async def admin_stats_handler(callback: CallbackQuery) -> None:
     if not is_admin(callback.from_user.id):
         return
 
-    # Нагрузка сервера
+    lang = await get_user_language(callback.from_user.id)
     cpu_usage = psutil.cpu_percent()
     ram = psutil.virtual_memory()
-    
-    # Статистика пользователей
+
     total_users = await get_total_users_count()
     new_today = await get_new_users_count(1)
     new_week = await get_new_users_count(7)
 
-    stats_text = (
-        "📊 **Статистика бота**\n\n"
-        f"🖥 **Сервер:**\n"
-        f"• CPU: `{cpu_usage}%`\n"
-        f"• RAM: `{ram.percent}%` ({round(ram.used / (1024**3), 2)} GB / {round(ram.total / (1024**3), 2)} GB)\n\n"
-        f"👥 **Пользователи:**\n"
-        f"• Всего: `{total_users}`\n"
-        f"• Новых за сегодня: `{new_today}`\n"
-        f"• Новых за неделю: `{new_week}`"
-    ).replace("**3", "^3") # Избегаем конфликта с Markdown bold
+    stats_text = get_text("admin_stats_template", lang).format(
+        cpu=cpu_usage,
+        ram_pct=ram.percent,
+        ram_used=round(ram.used / (1024 ** 3), 2),
+        ram_total=round(ram.total / (1024 ** 3), 2),
+        total=total_users,
+        new_today=new_today,
+        new_week=new_week,
+    )
 
     await callback.message.edit_text(
         stats_text,
-        reply_markup=InlineKeyboards.admin_main_menu(),
-        parse_mode="Markdown"
+        reply_markup=InlineKeyboards.admin_main_menu(lang),
+        parse_mode="Markdown",
     )
+
 
 @router.callback_query(F.data.regexp(r"admin_users:(\d+)"))
 async def admin_users_list_handler(callback: CallbackQuery) -> None:
     if not is_admin(callback.from_user.id):
         return
 
+    lang = await get_user_language(callback.from_user.id)
     offset = int(callback.data.split(":")[1])
     limit = 10
     users = await get_all_users_paginated(limit, offset)
-    
+
     if not users and offset == 0:
-        await callback.message.edit_text("Пользователей пока нет.", reply_markup=InlineKeyboards.admin_main_menu())
+        await callback.message.edit_text(
+            get_text("admin_users_empty", lang),
+            reply_markup=InlineKeyboards.admin_main_menu(lang),
+        )
         return
 
-    text = f"👥 **Список пользователей (смещение {offset}):**\n\n"
+    page = offset // limit + 1
+    text = get_text("admin_users_header", lang).format(page=page)
+    no_username_label = get_text("admin_users_no_username", lang)
     for user in users:
         raw_first_name = user.first_name or ""
-        raw_username = user.username or "нет username"
-        
-        # Экранируем Markdown спецсимволы
-        safe_first_name = raw_first_name.replace("_", "\\_").replace("*", "\\*").replace("`", "\\`")
-        safe_username = raw_username.replace("_", "\\_").replace("*", "\\*").replace("`", "\\`")
-        
+        raw_username = user.username or no_username_label
+
+        safe_first_name = _escape_md(raw_first_name)
+        safe_username = _escape_md(raw_username)
+
         prefix = f"@{safe_username}" if user.username else safe_username
         text += f"• ID: `{user.telegram_id}` | {safe_first_name} ({prefix})\n"
-    
+
     has_next = len(users) == limit
     await callback.message.edit_text(
         text,
-        reply_markup=InlineKeyboards.admin_users_list(offset, has_next),
-        parse_mode="Markdown"
+        reply_markup=InlineKeyboards.admin_users_list(offset, has_next, lang),
+        parse_mode="Markdown",
     )
+
 
 @router.callback_query(F.data == "admin_backup")
 async def admin_backup_handler(callback: CallbackQuery) -> None:
     if not is_admin(callback.from_user.id):
         return
 
+    lang = await get_user_language(callback.from_user.id)
     from app.services.backup_service import BackupService
+
     backup_service = BackupService(callback.bot)
     await backup_service.create_backup()
-    await callback.answer("Бэкап успешно создан!", show_alert=True)
+    await callback.answer(get_text("admin_backup_ok", lang), show_alert=True)
+
 
 @router.callback_query(F.data == "admin_download_backup")
 async def admin_download_backup_prompt(callback: CallbackQuery, state: FSMContext) -> None:
     if not is_admin(callback.from_user.id):
         return
 
+    lang = await get_user_language(callback.from_user.id)
     await state.set_state(AdminStates.wait_backup_password)
-    await callback.message.answer("⌨️ Введите пароль для выгрузки бэкапа:")
+    await callback.message.answer(get_text("admin_backup_prompt", lang))
     await callback.answer()
+
 
 @router.message(AdminStates.wait_backup_password)
 async def admin_download_backup_process(message: Message, state: FSMContext) -> None:
@@ -132,8 +160,8 @@ async def admin_download_backup_process(message: Message, state: FSMContext) -> 
         await state.clear()
         return
 
+    lang = await get_user_language(message.from_user.id)
     password = message.text
-    # Сразу удаляем сообщение с паролем для безопасности
     try:
         await message.delete()
     except Exception:
@@ -141,28 +169,29 @@ async def admin_download_backup_process(message: Message, state: FSMContext) -> 
 
     if password == ADMIN_BACKUP_PASSWORD:
         from app.services.backup_service import BackupService
+
         backup_service = BackupService(message.bot)
-        
-        await message.answer("🔄 Создаю свежий бэкап и подготавливаю файл...")
+        await message.answer(get_text("admin_backup_creating", lang))
         try:
             backup_path = await backup_service.create_backup()
-            
+
             if backup_path:
-                # Конвертируем в строку для документов и Path методов
                 path_str = str(backup_path)
                 filename = os.path.basename(path_str)
-                
                 document = FSInputFile(path_str)
                 await message.bot.send_document(
-                    message.chat.id, 
-                    document, 
-                    caption=f"💾 Резервная копия от {filename}"
+                    message.chat.id,
+                    document,
+                    caption=get_text("admin_backup_caption", lang).format(filename=filename),
                 )
             else:
-                await message.answer("❌ Ошибка при создании файла бэкапа. Проверьте логи сервера.")
+                await message.answer(get_text("admin_backup_file_error", lang))
         except Exception as e:
-            await message.answer(f"❌ Критическая ошибка при бэкапе: `{str(e)}`", parse_mode="Markdown")
+            await message.answer(
+                get_text("admin_backup_critical_error", lang).format(error=str(e)),
+                parse_mode="Markdown",
+            )
     else:
-        await message.answer("❌ Неверный пароль. Доступ отклонен.")
-    
+        await message.answer(get_text("admin_backup_wrong_password", lang))
+
     await state.clear()

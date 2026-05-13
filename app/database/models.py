@@ -1,6 +1,5 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey, Table
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey, Table, func
 from sqlalchemy.orm import declarative_base, relationship
-from datetime import datetime
 
 Base = declarative_base()
 
@@ -8,7 +7,7 @@ user_training_days = Table(
     'user_training_days',
     Base.metadata,
     Column('user_id', Integer, ForeignKey('users.id'), primary_key=True),
-    Column('training_day', String, primary_key=True)  # Дата в формате YYYY-MM-DD
+    Column('training_day', String, primary_key=True)  # YYYY-MM-DD
 )
 
 
@@ -20,23 +19,28 @@ class User(Base):
     username = Column(String, nullable=True)
     first_name = Column(String, nullable=True)
 
-    total_problems_solved = Column(Integer, default=0)
-    correct_answers = Column(Integer, default=0)
-    incorrect_answers = Column(Integer, default=0)
-    current_streak = Column(Integer, default=0)
-    max_streak = Column(Integer, default=0)
-    last_training_date = Column(DateTime, nullable=True)
+    total_problems_solved = Column(Integer, default=0, nullable=False)
+    correct_answers = Column(Integer, default=0, nullable=False)
+    incorrect_answers = Column(Integer, default=0, nullable=False)
+    current_streak = Column(Integer, default=0, nullable=False)
+    max_streak = Column(Integer, default=0, nullable=False)
+    last_training_date = Column(DateTime(timezone=True), nullable=True)
 
     language = Column(String, default="ru", nullable=True)  # ru, en
 
-    show_in_top = Column(Boolean, default=False)
+    show_in_top = Column(Boolean, default=False, nullable=False)
 
-    notification_enabled = Column(Boolean, default=True)
-    notification_preset = Column(String, default="three_times")  # morning, lunch, evening, three_times, custom, disabled
-    custom_notification_times = Column(Text, default="")  # JSON string with times HH:MM,HH:MM,...
+    notification_enabled = Column(Boolean, default=True, nullable=False)
+    notification_preset = Column(String, default="three_times", nullable=False)
+    custom_notification_times = Column(Text, default="", nullable=True)  # JSON string with HH:MM list
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
 
     training_sessions = relationship("TrainingSession", back_populates="user", cascade="all, delete-orphan")
 
@@ -45,22 +49,21 @@ class User(Base):
 
 
 class TrainingSession(Base):
-    """Модель сессии тренировки"""
     __tablename__ = "training_sessions"
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
     difficulty = Column(String, nullable=False)  # easy, medium, hard
-    mode = Column(String, nullable=False)  # choose, mult, div, mixed
+    mode = Column(String, nullable=False)  # choose, mult, div, mixed, add, sub, div_rem, pow, sqrt
 
-    total_problems = Column(Integer, default=0)
-    correct = Column(Integer, default=0)
-    incorrect = Column(Integer, default=0)
-    completed = Column(Boolean, default=False)
+    total_problems = Column(Integer, default=0, nullable=False)
+    correct = Column(Integer, default=0, nullable=False)
+    incorrect = Column(Integer, default=0, nullable=False)
+    completed = Column(Boolean, default=False, nullable=False)
 
-    started_at = Column(DateTime, default=datetime.utcnow)
-    completed_at = Column(DateTime, nullable=True)
+    started_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
 
     user = relationship("User", back_populates="training_sessions")
     problems = relationship("Problem", back_populates="session", cascade="all, delete-orphan")
@@ -77,11 +80,14 @@ class Problem(Base):
 
     first_number = Column(Integer, nullable=False)
     second_number = Column(Integer, nullable=False)
-    operation = Column(String, nullable=False)  # *, /
+    operation = Column(String, nullable=False)  # +, -, *, /, %, ^, sqrt
     correct_answer = Column(Integer, nullable=False)
     user_answer = Column(Integer, nullable=True)
 
-    is_correct = Column(Boolean, default=False)
+    is_correct = Column(Boolean, default=False, nullable=False)
+
+    # op-specific extras: remainder, display_form, etc.
+    metadata_json = Column(Text, nullable=True)
 
     session = relationship("TrainingSession", back_populates="problems")
 

@@ -57,9 +57,11 @@ class TestProblemGeneratorGenerateProblems:
         problems = ProblemGenerator.generate_problems(
             Difficulty.HARD, TrainingMode.MULTIPLICATION_ONLY, 15
         )
+        # Hard mode caps factors so the rendered product stays readable
+        # (intentional cap from problem_generator rewrite — see HANDOFF Step 7).
         for p in problems:
-            assert 100 <= p.first_num <= 999
-            assert 100 <= p.second_num <= 999
+            assert 10 <= p.first_num <= 99
+            assert 10 <= p.second_num <= 99
 
 
 class TestProblemGeneratorGenerateVariants:

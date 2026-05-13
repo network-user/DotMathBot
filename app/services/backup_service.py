@@ -1,74 +1,139 @@
-import os
-import shutil
-import logging
+"""PostgreSQL backup service.
+
+Spawns `pg_dump` via asyncio subprocess to produce a custom-format dump
+(`.dump`) which can be restored with `pg_restore`. Runs every 12 hours,
+retains the 20 most recent files, and notifies admins (with file size +
+exit code) after each run.
+"""
+from __future__ import annotations
+
 import asyncio
-from datetime import datetime
+import logging
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Iterable
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram import Bot
 
-from app.config import DB_PATH, ADMIN_IDS
+from app.config import ADMIN_IDS, DATABASE_URL, DB_PATH
 
 logger = logging.getLogger(__name__)
+
+BACKUP_RETENTION = 20
+BACKUP_FILENAME_PREFIX = "bot_backup_"
+BACKUP_FILENAME_SUFFIX = ".dump"
+
+
+def _to_libpq_url(url: str) -> str:
+    """Convert SQLAlchemy URL (postgresql+asyncpg://…) to libpq form for pg_dump."""
+    for prefix in ("postgresql+asyncpg://", "postgresql+psycopg://", "postgresql+psycopg2://"):
+        if url.startswith(prefix):
+            return "postgresql://" + url[len(prefix):]
+    return url
+
+
+def _format_size(num_bytes: int) -> str:
+    size = float(num_bytes)
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024 or unit == "GB":
+            return f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} GB"
+
 
 class BackupService:
     def __init__(self, bot: Bot):
         self.bot = bot
         self.scheduler = AsyncIOScheduler()
-        # Использование Path для надежности
-        from pathlib import Path
-        self.db_dir = Path(DB_PATH)
-        self.backups_dir = self.db_dir / "backups"
-        
+        self.backups_dir = Path(DB_PATH) / "backups"
         try:
             self.backups_dir.mkdir(parents=True, exist_ok=True)
-        except Exception as e:
+        except OSError as e:
             logger.error("Could not create backups directory %s: %s", self.backups_dir, e)
 
-    async def create_backup(self):
-        """Создает резервную копию базы данных."""
-        db_file = self.db_dir / "bot.db"
-        if not db_file.exists():
-            logger.error("DB file not found at %s", db_file)
-            return None
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_name = f"bot_backup_{timestamp}.db"
+    async def create_backup(self) -> Path | None:
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        backup_name = f"{BACKUP_FILENAME_PREFIX}{timestamp}{BACKUP_FILENAME_SUFFIX}"
         backup_path = self.backups_dir / backup_name
 
-        try:
-            shutil.copy2(db_file, backup_path)
-            logger.info("Backup created: %s", backup_name)
-            
-            await self._cleanup_old_backups()
-            await self._notify_admins(backup_name)
-            return backup_path
-        except Exception as e:
-            logger.error("Error creating backup: %s", e)
+        libpq_url = _to_libpq_url(DATABASE_URL)
+        proc = await asyncio.create_subprocess_exec(
+            "pg_dump",
+            "--format=custom",
+            "--no-owner",
+            "--no-acl",
+            f"--dbname={libpq_url}",
+            f"--file={backup_path}",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+        exit_code = proc.returncode or 0
+
+        if exit_code != 0 or not backup_path.exists():
+            err_text = (stderr or b"").decode("utf-8", errors="replace").strip()
+            logger.error(
+                "pg_dump failed (exit=%s): %s", exit_code, err_text or "<no stderr>"
+            )
+            await self._notify_admins_failure(backup_name, exit_code, err_text)
             return None
 
-    async def _cleanup_old_backups(self):
-        """Удаляет старые бэкапы, оставляя только 20 последних."""
-        backups = sorted(
-            [f for f in os.listdir(self.backups_dir) if f.startswith("bot_backup_")],
-            key=lambda x: os.path.getmtime(os.path.join(self.backups_dir, x))
-        )
-        
-        while len(backups) > 20:
-            oldest_backup = backups.pop(0)
-            os.remove(os.path.join(self.backups_dir, oldest_backup))
-            logger.info("Old backup removed: %s", oldest_backup)
+        size = backup_path.stat().st_size
+        logger.info("Backup created: %s (%s)", backup_name, _format_size(size))
+        await self._cleanup_old_backups()
+        await self._notify_admins_success(backup_name, size, exit_code)
+        return backup_path
 
-    async def _notify_admins(self, backup_name: str):
-        """Уведомляет администраторов об успешном создании бэкапа."""
-        message = f"✅ **Резервная копия БД создана успешно!**\n\n📄 Файл: `{backup_name}`\n⏰ Время: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}"
+    async def _cleanup_old_backups(self) -> None:
+        backups = sorted(
+            self._existing_backups(),
+            key=lambda p: p.stat().st_mtime,
+        )
+        while len(backups) > BACKUP_RETENTION:
+            oldest = backups.pop(0)
+            try:
+                oldest.unlink()
+                logger.info("Old backup removed: %s", oldest.name)
+            except OSError as e:
+                logger.warning("Failed to delete old backup %s: %s", oldest, e)
+
+    def _existing_backups(self) -> Iterable[Path]:
+        return [
+            p
+            for p in self.backups_dir.glob(f"{BACKUP_FILENAME_PREFIX}*{BACKUP_FILENAME_SUFFIX}")
+            if p.is_file()
+        ]
+
+    async def _notify_admins_success(self, backup_name: str, size_bytes: int, exit_code: int) -> None:
+        ts = datetime.now(timezone.utc).strftime("%d.%m.%Y %H:%M:%S")
+        message = (
+            "✅ **Резервная копия БД создана**\n\n"
+            f"📄 Файл: `{backup_name}`\n"
+            f"📦 Размер: {_format_size(size_bytes)}\n"
+            f"🔚 Код выхода: {exit_code}\n"
+            f"⏰ Время (UTC): {ts}"
+        )
+        await self._broadcast(message)
+
+    async def _notify_admins_failure(self, backup_name: str, exit_code: int, err_text: str) -> None:
+        snippet = (err_text[:500] + "…") if len(err_text) > 500 else err_text
+        message = (
+            "❌ **Бэкап не создан**\n\n"
+            f"📄 Файл: `{backup_name}`\n"
+            f"🔚 Код выхода: {exit_code}\n"
+            f"📝 stderr: `{snippet or '<empty>'}`"
+        )
+        await self._broadcast(message)
+
+    async def _broadcast(self, message: str) -> None:
         for admin_id in ADMIN_IDS:
             try:
                 await self.bot.send_message(admin_id, message, parse_mode="Markdown")
             except Exception as e:
                 logger.warning("Failed to notify admin %s: %s", admin_id, e)
 
-    def start(self):
-        """Запускает планировщик бэкапов (каждые 12 часов)."""
-        self.scheduler.add_job(self.create_backup, 'interval', hours=12)
+    def start(self) -> None:
+        self.scheduler.add_job(self.create_backup, "interval", hours=12)
         self.scheduler.start()
         logger.info("Backup scheduler started (every 12 hours)")
