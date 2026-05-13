@@ -61,6 +61,12 @@ def _apply_migrations() -> None:
 _apply_migrations()
 
 
+# The app's async engine is created at import time and binds to whatever
+# loop is running when its first connection is opened. Each pytest-asyncio
+# test gets a fresh function-scoped loop by default, which causes
+# "another operation is in progress" errors once the engine's connection
+# pool is reused on a different loop. A session-scoped loop keeps every
+# test on the same loop and sidesteps the issue.
 @pytest.fixture(scope="session")
 def event_loop():
     loop = asyncio.new_event_loop()

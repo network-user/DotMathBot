@@ -66,7 +66,7 @@ def setup_logging(
     root_logger.addHandler(error_handler)
     root_logger.addHandler(debug_handler)
 
-    logging.getLogger("aiosqlite").setLevel(logging.WARNING)
+    logging.getLogger("asyncpg").setLevel(logging.WARNING)
     logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
     logging.getLogger("aiogram").setLevel(logging.INFO)
 

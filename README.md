@@ -90,6 +90,8 @@ tests/                      # pytest + testcontainers Postgres
 
 `BackupService` запускает `pg_dump --format=custom --no-owner --no-acl` каждые 12 часов. Файлы лежат в `app/data/backups/bot_backup_YYYYMMDD_HHMMSS.dump`. Хранятся последние 20.
 
+> ⚠️ `pg_dump` должен быть доступен в `PATH` процесса бота. В docker-окружении используйте образ, в котором установлен `postgresql-client` (например, `apt-get install -y postgresql-client` поверх python-базы). На голом Windows-хосте поставьте Postgres client tools (или весь Postgres) и убедитесь, что `pg_dump --version` работает.
+
 Восстановление:
 ```bash
 pg_restore --clean --if-exists -d "$DATABASE_URL" app/data/backups/bot_backup_20260513_120000.dump
