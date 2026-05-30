@@ -3,7 +3,7 @@ import logging
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
 
-from app.database.db import get_user_language
+from app.database.db import get_user_favorite, get_user_language
 from app.keyboards.callbacks import LeaderboardCB, MenuCB, TipsCB
 from app.keyboards.inline import InlineKeyboards
 from app.locales import get_text
@@ -18,10 +18,15 @@ logger = logging.getLogger(__name__)
 async def show_profile_handler(callback: CallbackQuery, callback_data: MenuCB) -> None:
     lang = await get_user_language(callback.from_user.id)
     profile_text = await StatsService.get_formatted_profile(callback.from_user.id, lang)
+    favorite_mode, favorite_difficulty = await get_user_favorite(callback.from_user.id)
 
     await callback.message.edit_text(
         profile_text,
-        reply_markup=InlineKeyboards.back_only(lang),
+        reply_markup=InlineKeyboards.profile_actions(
+            lang,
+            favorite_mode=favorite_mode,
+            favorite_difficulty=favorite_difficulty,
+        ),
         parse_mode="Markdown",
     )
     await callback.answer()

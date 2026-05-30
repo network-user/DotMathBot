@@ -67,11 +67,13 @@ def format_problem_anchor(
     streak: int = 0,
     last_time_s: Optional[float] = None,
     feedback_prefix: Optional[str] = None,
+    session_kind: str = "normal",
 ) -> str:
     """Build the standard problem screen body.
 
     Layout (top-to-bottom, blank lines for breathing room):
 
+        🔁 Перерешка ошибок          ← only when session_kind == "retry"
         {feedback from previous turn}
 
         🧮 Пример N / M
@@ -94,6 +96,8 @@ def format_problem_anchor(
     footer = "   ".join(footer_parts)
 
     blocks: list[str] = []
+    if session_kind == "retry":
+        blocks.append(get_text("training_retry_banner", lang))
     if feedback_prefix:
         blocks.append(feedback_prefix)
     blocks.append(header)
@@ -107,7 +111,7 @@ def format_session_result(
     correct: int,
     total: int,
     avg_time_s: Optional[float],
-    streak_delta: int,
+    current_streak: int,
     lang: str,
 ) -> str:
     """Compact end-of-session block."""
@@ -117,7 +121,7 @@ def format_session_result(
         total=total,
         acc=round(accuracy),
         avg_time=format_seconds(avg_time_s) if avg_time_s else "—",
-        streak_delta=streak_delta,
+        streak=current_streak,
     )
 
 

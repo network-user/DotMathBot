@@ -35,10 +35,36 @@ async def test_show_profile_handler(callback):
         "app.handlers.profile.StatsService.get_formatted_profile",
         new_callable=AsyncMock,
         return_value="📊 Профиль",
+    ), patch(
+        "app.handlers.profile.get_user_favorite",
+        new_callable=AsyncMock,
+        return_value=(None, None),
     ):
         await show_profile_handler(callback, MenuCB(action="profile"))
     callback.message.edit_text.assert_called_once()
     assert callback.message.edit_text.call_args[0][0] == "📊 Профиль"
+
+
+@pytest.mark.asyncio
+async def test_show_profile_handler_renders_quick_start_when_favorite_set(callback):
+    """When favorite is set, the profile keyboard exposes the Quick Start row."""
+    with patch(
+        "app.handlers.profile.get_user_language",
+        new_callable=AsyncMock,
+        return_value="ru",
+    ), patch(
+        "app.handlers.profile.StatsService.get_formatted_profile",
+        new_callable=AsyncMock,
+        return_value="📊 Профиль",
+    ), patch(
+        "app.handlers.profile.get_user_favorite",
+        new_callable=AsyncMock,
+        return_value=("mult", "hard"),
+    ):
+        await show_profile_handler(callback, MenuCB(action="profile"))
+    kb = callback.message.edit_text.call_args.kwargs["reply_markup"]
+    button_texts = [b.text for row in kb.inline_keyboard for b in row]
+    assert any("Быстрый" in t for t in button_texts)
 
 
 @pytest.mark.asyncio

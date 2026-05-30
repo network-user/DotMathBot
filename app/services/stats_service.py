@@ -15,15 +15,18 @@ from app.utils.ui import format_seconds, today_msk
 
 class StatsService:
     @staticmethod
-    @staticmethod
     async def get_formatted_profile(telegram_id: int, lang: str = "ru") -> str:
         stats = await get_user_stats(telegram_id)
         if not stats:
             return get_text("profile_not_found", lang)
 
         accuracy = get_accuracy_percentage(stats.get("correct", 0), stats.get("total", 0))
-        show_in_top_status = "✅ Да" if stats.get("show_in_top", True) else "❌ Нет"
-        
+        show_in_top = bool(stats.get("show_in_top", False))
+        show_in_top_status = get_text(
+            "profile_show_in_top_yes" if show_in_top else "profile_show_in_top_no",
+            lang,
+        )
+
         text = (
             get_text("profile_title", lang)
             + get_text("profile_stats", lang)
@@ -34,7 +37,7 @@ class StatsService:
             + get_text("profile_streaks", lang)
             + get_text("profile_current_streak", lang).format(n=stats.get("current_streak", 0))
             + get_text("profile_max_streak", lang).format(n=stats.get("max_streak", 0))
-            + f"\n\n👤 **Показывать в топе:** {show_in_top_status}"
+            + get_text("profile_show_in_top_line", lang).format(status=show_in_top_status)
         )
         return text
 
@@ -68,16 +71,16 @@ class StatsService:
 
         if not top_data and offset == 0:
             return get_text("leaderboard_empty", lang), False
-        
+
         if not top_data:
-            return "Конец списка.", False
+            return get_text("leaderboard_end_of_list", lang), False
 
         text = get_text(title_key, lang)
         text += "━" * 15 + "\n"
         text += get_text("leaderboard_legend", lang)
-        
+
         anonymous = get_text("leaderboard_anonymous", lang)
-        hidden_label = "🕵️ Скрыто" if lang == "ru" else "🕵️ Hidden"
+        hidden_label = get_text("leaderboard_hidden", lang)
 
         for i, (user, value, diff) in enumerate(top_data, 1):
             idx = offset + i
@@ -118,12 +121,12 @@ class StatsService:
         if not rows and offset == 0:
             return get_text("daily_leaderboard_empty", lang), False
         if not rows:
-            return "Конец списка." if lang == "ru" else "End of list.", False
+            return get_text("leaderboard_end_of_list", lang), False
 
         text = get_text("daily_leaderboard_title", lang)
         text += "━" * 15 + "\n"
         anonymous = get_text("leaderboard_anonymous", lang)
-        hidden = "🕵️ Скрыто" if lang == "ru" else "🕵️ Hidden"
+        hidden = get_text("leaderboard_hidden", lang)
         row_template = get_text("daily_leaderboard_row", lang)
 
         for i, (user, attempt) in enumerate(rows, 1):

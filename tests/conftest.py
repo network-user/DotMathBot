@@ -67,6 +67,11 @@ _apply_migrations()
 # "another operation is in progress" errors once the engine's connection
 # pool is reused on a different loop. A session-scoped loop keeps every
 # test on the same loop and sidesteps the issue.
+#
+# pytest-asyncio 0.25 still emits a deprecation warning for this pattern but
+# does not yet expose ``asyncio_default_test_loop_scope`` (added in 0.26+),
+# so the override is the only way to keep all tests on one loop on this
+# version. The warning is filtered in pytest.ini.
 @pytest.fixture(scope="session")
 def event_loop():
     loop = asyncio.new_event_loop()

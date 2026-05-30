@@ -132,6 +132,30 @@ def test_anchor_includes_feedback_prefix(monkeypatch):
     assert text.startswith("✅\n")
 
 
+def test_anchor_shows_retry_banner_only_in_retry_session():
+    """Retry sessions get a small banner above feedback/header — reassures
+    the user that they're in the Retry-mistakes flow."""
+    normal = format_problem_anchor(
+        "1 + 1", current=1, total=3, lang="ru", session_kind="normal"
+    )
+    retry = format_problem_anchor(
+        "1 + 1", current=1, total=3, lang="ru", session_kind="retry"
+    )
+    daily = format_problem_anchor(
+        "1 + 1", current=1, total=3, lang="ru", session_kind="daily"
+    )
+    assert "Перерешка" in retry
+    assert "Перерешка" not in normal
+    assert "Перерешка" not in daily
+
+
+def test_anchor_retry_banner_localized():
+    text_en = format_problem_anchor(
+        "1 + 1", current=1, total=3, lang="en", session_kind="retry"
+    )
+    assert "Mistakes" in text_en or "retry" in text_en.lower()
+
+
 # ---- today_msk ------------------------------------------------------------
 
 

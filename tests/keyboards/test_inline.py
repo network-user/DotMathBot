@@ -196,6 +196,31 @@ class TestNotificationPresetSelection:
         assert any(cb.action == "menu" for cb in backs)
 
 
+class TestProfileActions:
+    def test_training_and_back_always_present(self):
+        kb = InlineKeyboards.profile_actions("ru")
+        actions = {cb.action for cb in _unpack_all(kb, MenuCB)}
+        backs = {cb.action for cb in _unpack_all(kb, BackCB)}
+        assert "training" in actions
+        assert "menu" in backs
+
+    def test_quick_start_only_when_favorite_set(self):
+        with_fav = InlineKeyboards.profile_actions("ru", favorite_mode="mult")
+        without = InlineKeyboards.profile_actions("ru")
+        with_actions = {cb.action for cb in _unpack_all(with_fav, MenuCB)}
+        without_actions = {cb.action for cb in _unpack_all(without, MenuCB)}
+        assert "quick_start" in with_actions
+        assert "quick_start" not in without_actions
+
+    def test_quick_start_label_includes_difficulty(self):
+        kb = InlineKeyboards.profile_actions(
+            "ru", favorite_mode="mult", favorite_difficulty="hard"
+        )
+        flat = [b.text for row in kb.inline_keyboard for b in row]
+        qs_text = next(t for t in flat if "Быстрый" in t)
+        assert "Сложный" in qs_text and "Умножение" in qs_text
+
+
 class TestBackOnly:
     def test_has_back_button(self):
         kb = InlineKeyboards.back_only("ru")

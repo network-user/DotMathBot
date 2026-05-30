@@ -8,9 +8,10 @@ from zoneinfo import ZoneInfo
 
 from aiogram import Bot, Dispatcher
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
+from aiogram.fsm.storage.base import BaseStorage
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from app.config import ADMIN_IDS, BOT_TOKEN
+from app.config import ADMIN_IDS, BOT_TOKEN, REDIS_URL
 from app.database.db import init_db
 from app.handlers import admin, daily, notifications, profile, settings, start, training
 from app.locales import get_text
@@ -52,13 +53,30 @@ class App(NamedTuple):
     backup_service: BackupService
 
 
+def _build_fsm_storage() -> BaseStorage:
+    """Return RedisStorage when REDIS_URL is configured, else MemoryStorage.
+
+    Memory storage loses every active training session on restart — fine for
+    local dev. Production runs in compose should always point REDIS_URL at the
+    redis service so mid-training users survive a redeploy.
+    """
+    if not REDIS_URL:
+        logger.info("REDIS_URL not set — using in-memory FSM storage")
+        return MemoryStorage()
+
+    from aiogram.fsm.storage.redis import RedisStorage
+    storage = RedisStorage.from_url(REDIS_URL)
+    logger.info("Using Redis FSM storage at %s", REDIS_URL)
+    return storage
+
+
 async def setup_app() -> App:
     logger.info("Initializing database...")
     await init_db()
     logger.info("Database initialized successfully")
 
     bot = Bot(token=BOT_TOKEN)
-    storage = MemoryStorage()
+    storage = _build_fsm_storage()
     dp = Dispatcher(storage=storage)
 
     logger.info("Initializing NotificationService...")

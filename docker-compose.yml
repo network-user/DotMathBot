@@ -17,5 +17,42 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    container_name: dotmath-redis
+    restart: unless-stopped
+    # appendonly yes makes FSM state survive container restarts.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dotmath-bot
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      # Inside the compose network, the bot reaches Postgres/Redis by service
+      # name. ``.env`` defaults to localhost for host runs; these override.
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-dotmath}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-dotmath}
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      # Backups + logs live on the host so they survive container rebuilds.
+      - ./app/data:/app/app/data
+      - ./logs:/app/logs
+
 volumes:
   pgdata:
+  redisdata:

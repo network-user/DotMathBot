@@ -101,9 +101,14 @@ async def profile_command(message: Message) -> None:
 
     lang = await get_user_language(message.from_user.id)
     profile_text = await StatsService.get_formatted_profile(message.from_user.id, lang)
+    favorite_mode, favorite_difficulty = await get_user_favorite(message.from_user.id)
     await message.answer(
         profile_text,
-        reply_markup=InlineKeyboards.back_only(lang),
+        reply_markup=InlineKeyboards.profile_actions(
+            lang,
+            favorite_mode=favorite_mode,
+            favorite_difficulty=favorite_difficulty,
+        ),
         parse_mode="Markdown",
     )
 
@@ -140,12 +145,16 @@ async def settings_command(message: Message) -> None:
     lang = await get_user_language(message.from_user.id)
     user = await get_user(message.from_user.id)
     favorite_mode = getattr(user, "favorite_mode", None) if user else None
+    favorite_difficulty = getattr(user, "favorite_difficulty", None) if user else None
     show_in_top = bool(getattr(user, "show_in_top", False)) if user else False
 
     await message.answer(
         get_text("settings_title", lang),
         reply_markup=InlineKeyboards.settings_menu(
-            lang, favorite_mode=favorite_mode, show_in_top=show_in_top
+            lang,
+            favorite_mode=favorite_mode,
+            favorite_difficulty=favorite_difficulty,
+            show_in_top=show_in_top,
         ),
         parse_mode="Markdown",
     )

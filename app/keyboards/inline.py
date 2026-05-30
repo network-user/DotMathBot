@@ -637,6 +637,46 @@ class InlineKeyboards:
         )
 
     @staticmethod
+    def profile_actions(
+        lang: str = "ru",
+        favorite_mode: str | None = None,
+        favorite_difficulty: str | None = None,
+    ) -> InlineKeyboardMarkup:
+        """Profile screen keyboard — Quick start + Training + back.
+
+        Lets the user kick off a session right from the profile without
+        bouncing back to the main menu. Quick start row only renders when
+        a favorite is configured.
+        """
+        rows: list[list[InlineKeyboardButton]] = []
+        mode_text = mode_label(favorite_mode, lang) if favorite_mode else ""
+        if mode_text:
+            diff_text = difficulty_label(favorite_difficulty or "medium", lang)
+            combined = f"{diff_text} {mode_text}".strip()
+            fav_label = get_text("btn_quick_start", lang).format(mode=combined)
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=fav_label,
+                        callback_data=MenuCB(action="quick_start").pack(),
+                    )
+                ]
+            )
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=get_text("btn_start_training", lang),
+                    callback_data=MenuCB(action="training").pack(),
+                ),
+                InlineKeyboardButton(
+                    text=get_text("btn_back_to_menu", lang),
+                    callback_data=BackCB(action="menu").pack(),
+                ),
+            ]
+        )
+        return InlineKeyboardMarkup(inline_keyboard=rows)
+
+    @staticmethod
     def back_only(lang: str = "ru") -> InlineKeyboardMarkup:
         """Bare 'back to menu' keyboard — no privacy toggle (for non-profile screens)."""
         return InlineKeyboardMarkup(

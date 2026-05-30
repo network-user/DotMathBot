@@ -57,14 +57,15 @@ TEXTS = {
     # ---- Training anchor ----------------------------------------------
     "training_anchor_header": "🧮 Problem {current} / {total}\n{bar}",
     "training_correct_short": "✅ Correct!",
-    "training_incorrect_short": "❌ Correct answer: **{answer}**",
-    "training_skipped_short": "⏭ Skipped · answer: **{answer}**",
+    "training_incorrect_short": "❌ Wrong",
+    "training_skipped_short": "⏭ Skipped",
+    "training_retry_banner": "🔁 _Mistakes retry_",
     "training_type_answer_invalid": "⚠️ A number is expected.",
     "training_result_v2": (
         "📊 **Result**\n"
         "────────────────\n"
         "✅ {correct} / {total}    🎯 {acc}%\n"
-        "⏱ {avg_time} avg        🔥 +{streak_delta}"
+        "⏱ {avg_time} avg        🔥 {streak} d"
     ),
     "training_no_mistakes": "No mistakes — nothing to retry!",
     "training_abort": "❌ Training cancelled.",
@@ -84,6 +85,9 @@ TEXTS = {
     "profile_streaks": "─────────\n",
     "profile_current_streak": "🔥 Streak: {n}\n",
     "profile_max_streak": "🏆 Record: {n}",
+    "profile_show_in_top_line": "\n\n👤 **Show in top:** {status}",
+    "profile_show_in_top_yes": "✅ Yes",
+    "profile_show_in_top_no": "❌ No",
     "btn_toggle_top_show": "👤 Show me in top",
     "btn_toggle_top_hide": "👤 Hide me from top",
 
@@ -96,6 +100,8 @@ TEXTS = {
     "leaderboard_title_weighted": "🏆 **Top by weighted points**\n_(hard tasks count more)_\n\n",
     "leaderboard_legend": "🟢 easy  🟡 med  🔴 hard\n\n",
     "leaderboard_anonymous": "Anonymous",
+    "leaderboard_hidden": "🕵️ Hidden",
+    "leaderboard_end_of_list": "End of list.",
     "leaderboard_row_days": "{medal} {name} • **{value} d** · 🟢 {easy} 🟡 {medium} 🔴 {hard}\n",
     "leaderboard_row_solved": "{medal} {name} • **{value}** · 🟢 {easy} 🟡 {medium} 🔴 {hard}\n",
     "leaderboard_row_accuracy": "{medal} {name} • **{value}%** · 🟢 {easy} 🟡 {medium} 🔴 {hard}\n",

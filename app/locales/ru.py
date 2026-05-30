@@ -57,14 +57,15 @@ TEXTS = {
     # ---- Training anchor ----------------------------------------------
     "training_anchor_header": "🧮 Пример {current} / {total}\n{bar}",
     "training_correct_short": "✅ Верно!",
-    "training_incorrect_short": "❌ Правильный ответ: **{answer}**",
-    "training_skipped_short": "⏭ Пропущено · ответ: **{answer}**",
+    "training_incorrect_short": "❌ Неверно",
+    "training_skipped_short": "⏭ Пропущено",
+    "training_retry_banner": "🔁 _Перерешка ошибок_",
     "training_type_answer_invalid": "⚠️ Нужно число.",
     "training_result_v2": (
         "📊 **Результат**\n"
         "────────────────\n"
         "✅ {correct} / {total}    🎯 {acc}%\n"
-        "⏱ {avg_time} ср.        🔥 +{streak_delta}"
+        "⏱ {avg_time} ср.        🔥 {streak} дн"
     ),
     "training_no_mistakes": "Ошибок не было — перерешивать нечего!",
     "training_abort": "❌ Тренировка прервана.",
@@ -84,6 +85,9 @@ TEXTS = {
     "profile_streaks": "─────────\n",
     "profile_current_streak": "🔥 Серия: {n}\n",
     "profile_max_streak": "🏆 Рекорд: {n}",
+    "profile_show_in_top_line": "\n\n👤 **Показывать в топе:** {status}",
+    "profile_show_in_top_yes": "✅ Да",
+    "profile_show_in_top_no": "❌ Нет",
     "btn_toggle_top_show": "👤 Показать имя в топе",
     "btn_toggle_top_hide": "👤 Скрыть имя в топе",
 
@@ -96,6 +100,8 @@ TEXTS = {
     "leaderboard_title_weighted": "🏆 **Топ по очкам**\n_(сложные приоритетнее)_\n\n",
     "leaderboard_legend": "🟢 лёгк  🟡 ср  🔴 сл\n\n",
     "leaderboard_anonymous": "Аноним",
+    "leaderboard_hidden": "🕵️ Скрыто",
+    "leaderboard_end_of_list": "Конец списка.",
     "leaderboard_row_days": "{medal} {name} • **{value} дн** · 🟢 {easy} 🟡 {medium} 🔴 {hard}\n",
     "leaderboard_row_solved": "{medal} {name} • **{value}** · 🟢 {easy} 🟡 {medium} 🔴 {hard}\n",
     "leaderboard_row_accuracy": "{medal} {name} • **{value}%** · 🟢 {easy} 🟡 {medium} 🔴 {hard}\n",

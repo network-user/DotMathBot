@@ -14,7 +14,6 @@ import hashlib
 import logging
 import random
 from datetime import date, datetime, timezone
-from typing import Optional
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
@@ -32,7 +31,7 @@ from app.handlers.training import TrainingStates, show_problem
 from app.keyboards.callbacks import MenuCB
 from app.keyboards.inline import InlineKeyboards
 from app.locales import get_text
-from app.services.problem_generator import Problem, ProblemGenerator
+from app.services.problem_generator import ProblemGenerator
 from app.utils.constants import Difficulty, TrainingMode
 from app.utils.ui import safe_edit, today_msk
 
@@ -82,20 +81,6 @@ def generate_daily_specs(seed: int) -> list[dict]:
     return specs
 
 
-def _specs_to_problems(specs: list[dict]) -> list[Problem]:
-    return [
-        Problem(
-            first_num=int(s["first_num"]),
-            second_num=int(s["second_num"]),
-            operation=s["operation"],
-            answer=int(s["answer"]),
-            formatted_text=s.get("formatted_text"),
-            metadata=s.get("metadata") or {},
-        )
-        for s in specs
-    ]
-
-
 @router.callback_query(MenuCB.filter(F.action == "daily"))
 async def daily_entry_handler(
     callback: CallbackQuery, callback_data: MenuCB, state: FSMContext
@@ -119,14 +104,17 @@ async def daily_entry_handler(
 
     challenge = await get_or_create_daily_challenge(today, generate_daily_specs, daily_seed)
     attempt, _created = await get_or_create_daily_attempt(user.id, today)
-    problems = _specs_to_problems(list(challenge.problem_specs))
+    # Specs are already JSON-safe dicts (same shape as training.py's
+    # _problem_to_spec) — push them straight into FSM so RedisStorage can
+    # serialize them. show_problem materializes Problem on demand.
+    spec_list = list(challenge.problem_specs)
 
     # Synthetic training session row so we can persist Problem rows + retry would still work.
     new_session = await create_training_session(
         telegram_id=callback.from_user.id,
         difficulty=Difficulty.HARD.value,
         mode=TrainingMode.MIXED.value,
-        total_problems=len(problems),
+        total_problems=len(spec_list),
     )
 
     await state.clear()
@@ -135,7 +123,7 @@ async def daily_entry_handler(
         session_id=new_session.id,
         difficulty=Difficulty.HARD.value,
         mode=TrainingMode.MIXED.value,
-        problems=problems,
+        problems=spec_list,
         idx=0,
         correct=0,
         incorrect=0,

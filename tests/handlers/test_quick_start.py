@@ -81,6 +81,59 @@ async def test_quick_start_launches_session_with_favorite(callback, state):
 
 
 @pytest.mark.asyncio
+async def test_quick_start_persists_problems_as_specs_not_objects(callback, state):
+    """All FSM writers must store JSON-safe spec dicts so RedisStorage works
+    and so readers' ``_specs_to_problems(data["problems"])`` doesn't crash.
+
+    Regression guard: if a future patch reverts to ``problems=problems``
+    (raw Problem list), this test fires.
+    """
+    from app.services.problem_generator import Problem
+
+    real_problems = [
+        Problem(
+            first_num=2,
+            second_num=3,
+            operation="×",
+            answer=6,
+            formatted_text="2 × 3",
+            metadata={},
+        )
+    ]
+    session = MagicMock()
+    session.id = 11
+    with patch(
+        "app.handlers.training.get_user_language",
+        new_callable=AsyncMock,
+        return_value="ru",
+    ), patch(
+        "app.handlers.training.get_user_favorite",
+        new_callable=AsyncMock,
+        return_value=("mult", "easy"),
+    ), patch(
+        "app.handlers.training.ProblemGenerator.generate_problems",
+        return_value=real_problems,
+    ), patch(
+        "app.handlers.training.create_training_session",
+        new_callable=AsyncMock,
+        return_value=session,
+    ), patch(
+        "app.handlers.training.show_problem", new_callable=AsyncMock
+    ):
+        await quick_start_handler(callback, MenuCB(action="quick_start"), state)
+
+    kwargs = state.update_data.call_args.kwargs
+    stored = kwargs["problems"]
+    assert isinstance(stored, list) and stored, "problems list missing or empty"
+    assert all(isinstance(item, dict) for item in stored), (
+        f"Quick Start stored {type(stored[0]).__name__}, expected dict specs"
+    )
+    # And the spec keys are the ones _specs_to_problems consumes.
+    required = {"first_num", "second_num", "operation", "answer", "formatted_text"}
+    assert required <= set(stored[0].keys())
+
+
+@pytest.mark.asyncio
 async def test_quick_start_defaults_to_medium_when_favorite_difficulty_is_null(
     callback, state
 ):

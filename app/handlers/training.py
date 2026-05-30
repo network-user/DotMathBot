@@ -26,6 +26,7 @@ from app.database.db import (
     complete_training_session,
     create_training_session,
     get_session_mistakes,
+    get_user,
     get_user_favorite,
     get_user_language,
     record_problem_answered,
@@ -123,7 +124,7 @@ async def select_mode_handler(
         session_id=session.id,
         difficulty=difficulty.value,
         mode=mode.value,
-        problems=problems,
+        problems=_problems_to_specs(problems),
         idx=0,
         correct=0,
         incorrect=0,
@@ -217,7 +218,7 @@ async def quick_start_handler(
         session_id=session.id,
         difficulty=difficulty.value,
         mode=mode.value,
-        problems=problems,
+        problems=_problems_to_specs(problems),
         idx=0,
         correct=0,
         incorrect=0,
@@ -239,6 +240,56 @@ async def quick_start_handler(
 # ---------------------------------------------------------------------------
 
 
+def _problem_metadata_for_persist(problem: Problem) -> dict:
+    """Bundle Problem.metadata with formatted_text so retry can rebuild the display.
+
+    Operations like sqrt/power/div_remainder render with a custom
+    ``formatted_text`` (e.g. ``√144``, ``12²``) that can't be reconstructed from
+    ``first_num``/``operation``/``second_num`` alone — without storing it,
+    retry-mistakes would render those problems as garbage (``144 √ 0``).
+    """
+    meta = dict(problem.metadata or {})
+    meta["formatted_text"] = problem.formatted_text
+    return meta
+
+
+def _problem_to_spec(problem: Problem) -> dict:
+    """Flatten a Problem into a JSON-safe dict for FSM storage.
+
+    RedisStorage serializes FSM data as JSON; Problem instances aren't
+    serializable directly. We round-trip via plain dicts at the FSM boundary —
+    daily.py already uses the same shape, so the spec format is shared.
+    """
+    return {
+        "first_num": problem.first_num,
+        "second_num": problem.second_num,
+        "operation": problem.operation,
+        "answer": problem.answer,
+        "formatted_text": problem.formatted_text,
+        "metadata": problem.metadata or {},
+    }
+
+
+def _spec_to_problem(spec: dict) -> Problem:
+    """Inverse of ``_problem_to_spec`` — rebuild a Problem from FSM-stored dict."""
+    return Problem(
+        first_num=int(spec["first_num"]),
+        second_num=int(spec["second_num"]),
+        operation=spec["operation"],
+        answer=int(spec["answer"]),
+        formatted_text=spec.get("formatted_text"),
+        metadata=spec.get("metadata") or {},
+    )
+
+
+def _problems_to_specs(problems: list[Problem]) -> list[dict]:
+    return [_problem_to_spec(p) for p in problems]
+
+
+def _specs_to_problems(specs: list[dict]) -> list[Problem]:
+    return [_spec_to_problem(s) for s in specs]
+
+
 async def show_problem(
     callback: CallbackQuery, state: FSMContext, feedback_prefix: str | None = None
 ) -> None:
@@ -248,7 +299,7 @@ async def show_problem(
     modes — the keyboard branches on ``mode``, the rendering does not.
     """
     data = await state.get_data()
-    problems: list[Problem] = data["problems"]
+    problems = _specs_to_problems(data["problems"])
     idx = int(data["idx"])
     lang = data.get("lang", "ru")
     mode = TrainingMode(data["mode"])
@@ -257,14 +308,13 @@ async def show_problem(
 
     problem = problems[idx]
 
-    # Persist the problem row so we can attach the answer + retry-mistakes later.
     problem_id = await record_problem_shown(
         session_id=session_id,
         first_number=problem.first_num,
         second_number=problem.second_num,
         operation=problem.operation,
         correct_answer=problem.answer,
-        metadata=problem.metadata,
+        metadata=_problem_metadata_for_persist(problem),
     )
 
     shown_at = datetime.now(timezone.utc)
@@ -281,6 +331,7 @@ async def show_problem(
         streak=int(data.get("session_streak", 0)),
         last_time_s=data.get("last_time_s"),
         feedback_prefix=feedback_prefix,
+        session_kind=data.get("session_kind", "normal"),
     )
 
     if mode == TrainingMode.CHOOSE_ANSWER:
@@ -353,7 +404,7 @@ async def handle_typed_answer(message: Message, state: FSMContext) -> None:
         user_answer = int(raw)
     except (ValueError, AttributeError):
         # Re-render the anchor with an inline warning under the expression.
-        problems: list[Problem] = data["problems"]
+        problems = _specs_to_problems(data["problems"])
         idx = int(data["idx"])
         text = format_problem_anchor(
             expression=problems[idx].formatted_text,
@@ -363,6 +414,7 @@ async def handle_typed_answer(message: Message, state: FSMContext) -> None:
             streak=int(data.get("session_streak", 0)),
             last_time_s=data.get("last_time_s"),
             feedback_prefix=get_text("training_type_answer_invalid", lang),
+            session_kind=data.get("session_kind", "normal"),
         )
         await _edit_anchor_from_state(
             message.bot, state, text, InlineKeyboards.training_type_controls(lang)
@@ -410,7 +462,9 @@ async def _record_and_advance(
 ) -> None:
     """Persist the answer, update FSM counters, render next problem or finish."""
     data = await state.get_data()
-    correct_answer = int(data["problems"][int(data["idx"])].answer)
+    problems_data = data["problems"]
+    idx_now = int(data["idx"])
+    correct_answer = int(problems_data[idx_now]["answer"])
     is_correct = (not skipped) and user_answer == correct_answer
 
     problem_id = data.get("current_problem_id")
@@ -423,9 +477,8 @@ async def _record_and_advance(
     session_streak = int(data.get("session_streak", 0))
     session_streak = session_streak + 1 if is_correct else 0
 
-    next_idx = int(data["idx"]) + 1
-    problems: list[Problem] = data["problems"]
-    has_next = next_idx < len(problems)
+    next_idx = idx_now + 1
+    has_next = next_idx < len(problems_data)
     lang = data.get("lang", "ru")
 
     await state.update_data(
@@ -433,15 +486,18 @@ async def _record_and_advance(
         incorrect=incorrect,
         session_streak=session_streak,
         last_time_s=last_time_s,
-        idx=next_idx if has_next else int(data["idx"]),
+        idx=next_idx if has_next else idx_now,
     )
 
+    # Note: deliberately don't reveal the correct answer on wrong/skipped — both
+    # paths feed into "Retry mistakes", and showing the answer would make retry
+    # trivial. Users learn by retrying, not by being told.
     if is_correct:
         feedback_prefix = get_text("training_correct_short", lang)
     elif skipped:
-        feedback_prefix = get_text("training_skipped_short", lang).format(answer=correct_answer)
+        feedback_prefix = get_text("training_skipped_short", lang)
     else:
-        feedback_prefix = get_text("training_incorrect_short", lang).format(answer=correct_answer)
+        feedback_prefix = get_text("training_incorrect_short", lang)
 
     if has_next:
         await _show_next_problem(target, state, feedback_prefix)
@@ -459,7 +515,7 @@ async def _show_next_problem(
 
     # Message path (typed answer): build text+kb, then edit the stored anchor.
     data = await state.get_data()
-    problems: list[Problem] = data["problems"]
+    problems = _specs_to_problems(data["problems"])
     idx = int(data["idx"])
     lang = data.get("lang", "ru")
     difficulty = Difficulty(data["difficulty"])
@@ -473,7 +529,7 @@ async def _show_next_problem(
         second_number=problem.second_num,
         operation=problem.operation,
         correct_answer=problem.answer,
-        metadata=problem.metadata,
+        metadata=_problem_metadata_for_persist(problem),
     )
     shown_at = datetime.now(timezone.utc)
     await state.update_data(
@@ -489,6 +545,7 @@ async def _show_next_problem(
         streak=int(data.get("session_streak", 0)),
         last_time_s=data.get("last_time_s"),
         feedback_prefix=feedback_prefix,
+        session_kind=data.get("session_kind", "normal"),
     )
 
     if mode == TrainingMode.CHOOSE_ANSWER:
@@ -542,12 +599,15 @@ async def finish_training(
             )
 
     avg_time = await _session_avg_time(session_id)
-    streak_delta = correct  # placeholder — full per-day delta would need user join
+    # complete_training_session above already mutated user.current_streak; re-read
+    # so the result screen reflects the user's actual day-streak after this run.
+    user_after = await get_user(target.from_user.id)
+    current_streak = int(getattr(user_after, "current_streak", 0) or 0)
     body = format_session_result(
         correct=correct,
         total=total,
         avg_time_s=avg_time,
-        streak_delta=streak_delta,
+        current_streak=current_streak,
         lang=lang,
     )
     if feedback_prefix:
@@ -643,7 +703,7 @@ async def retry_mistakes_handler(
     await state.set_state(TrainingStates.waiting_for_answer)
     await state.update_data(
         session_id=new_session.id,
-        problems=rebuilt,
+        problems=_problems_to_specs(rebuilt),
         idx=0,
         correct=0,
         incorrect=0,
