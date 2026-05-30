@@ -444,6 +444,53 @@ async def update_user_show_in_top(telegram_id: int, value: bool) -> None:
             await session.commit()
 
 
+async def get_user_favorite_mode(telegram_id: int) -> Optional[str]:
+    """Return the user's saved favorite mode or None if not set."""
+    user = await get_user(telegram_id)
+    if not user:
+        return None
+    return user.favorite_mode
+
+
+async def get_user_favorite(telegram_id: int) -> tuple[Optional[str], Optional[str]]:
+    """Return ``(favorite_mode, favorite_difficulty)`` — either may be None."""
+    user = await get_user(telegram_id)
+    if not user:
+        return None, None
+    return user.favorite_mode, user.favorite_difficulty
+
+
+async def update_user_favorite_mode(telegram_id: int, mode: Optional[str]) -> None:
+    """Set or clear the favorite mode. Pass None to clear."""
+    async with async_session_maker() as session:
+        stmt = select(User).where(User.telegram_id == str(telegram_id))
+        result = await session.execute(stmt)
+        user = result.scalar_one_or_none()
+        if user:
+            user.favorite_mode = mode
+            await session.commit()
+
+
+async def update_user_favorite(
+    telegram_id: int,
+    mode: Optional[str],
+    difficulty: Optional[str],
+) -> None:
+    """Atomically set both favorite_mode and favorite_difficulty.
+
+    Pass None for either to clear it. Used by the Settings "favorite" flow
+    so the two columns can't drift out of sync.
+    """
+    async with async_session_maker() as session:
+        stmt = select(User).where(User.telegram_id == str(telegram_id))
+        result = await session.execute(stmt)
+        user = result.scalar_one_or_none()
+        if user:
+            user.favorite_mode = mode
+            user.favorite_difficulty = difficulty
+            await session.commit()
+
+
 async def get_total_users_count() -> int:
     async with async_session_maker() as session:
         stmt = select(func.count(User.id))

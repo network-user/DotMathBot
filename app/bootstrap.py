@@ -2,14 +2,18 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import NamedTuple
+from zoneinfo import ZoneInfo
 
 from aiogram import Bot, Dispatcher
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from app.config import BOT_TOKEN
+from app.config import ADMIN_IDS, BOT_TOKEN
 from app.database.db import init_db
-from app.handlers import admin, daily, notifications, profile, start, training
+from app.handlers import admin, daily, notifications, profile, settings, start, training
+from app.locales import get_text
 from app.middlewares.error_middleware import ErrorMiddleware
 from app.services.backup_service import BackupService
 from app.services.notification_loader import load_scheduled_users
@@ -17,6 +21,28 @@ from app.services.notification_service import NotificationService
 from app.utils.set_commands import set_bot_commands
 
 logger = logging.getLogger(__name__)
+
+
+async def notify_admins_startup(bot: Bot, reminders_count: int) -> None:
+    """Best-effort ping every admin that the bot just came up.
+
+    Sends are wrapped in try/except — a blocked or unknown admin shouldn't
+    abort the startup flow. ADMIN_IDS that haven't ever started the bot will
+    fail with TelegramForbiddenError; we log and move on.
+    """
+    if not ADMIN_IDS:
+        return
+
+    timestamp = datetime.now(ZoneInfo("Europe/Moscow")).strftime("%Y-%m-%d %H:%M MSK")
+    text = get_text("admin_startup_notification", "ru").format(
+        timestamp=timestamp,
+        reminders_count=reminders_count,
+    )
+    for admin_id in ADMIN_IDS:
+        try:
+            await bot.send_message(admin_id, text, parse_mode="Markdown")
+        except (TelegramBadRequest, TelegramForbiddenError) as e:
+            logger.warning("Startup notification to admin %s failed: %s", admin_id, e)
 
 
 class App(NamedTuple):
@@ -57,6 +83,7 @@ async def setup_app() -> App:
     dp.include_router(training.router)
     dp.include_router(profile.router)
     dp.include_router(notifications.router)
+    dp.include_router(settings.router)
     dp.include_router(admin.router)
     logger.info("Handlers registered successfully")
 
@@ -70,6 +97,9 @@ async def setup_app() -> App:
 
 async def run_app(app: App) -> None:
     try:
+        await notify_admins_startup(
+            app.bot, reminders_count=app.notification_service.get_all_jobs_count()
+        )
         logger.info("Bot started and listening for updates...")
         await app.dp.start_polling(
             app.bot,

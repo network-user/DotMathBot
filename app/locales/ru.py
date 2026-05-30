@@ -8,20 +8,37 @@ TEXTS = {
     "Тренируйся каждый день, собирай серии и поднимайся в топе.",
     "welcome_fallback_name": "друже",
     "main_menu": "🏠 **Главное меню**\nВыбери действие:",
-    "btn_daily_challenge": "🎯 Челлендж дня",
+    "btn_daily_challenge": "📅 Челлендж",
     "btn_start_training": "🎓 Тренировка",
-    "btn_my_profile": "📊 Профиль",
-    "btn_notifications": "⚙️ Уведомления",
+    "btn_my_profile": "👤 Профиль",
+    "btn_notifications": "🔔 Уведомления",
     "btn_leaderboard": "🏆 Топ",
     "btn_tips": "💡 Шпаргалки",
+    "btn_settings": "⚙️ Настройки",
+    "btn_quick_start": "⚡ Быстрый старт: {mode}",
     "btn_back": "← Назад",
     "btn_back_to_menu": "🏠 В меню",
     "btn_lang_en": "🌐 EN",
     "btn_lang_ru": "🌐 RU",
 
+    # ---- Settings -----------------------------------------------------
+    "settings_title": "⚙️ **Настройки**\nНастрой бота под себя:",
+    "btn_settings_favorite": "⚡ Любимый режим: {mode}",
+    "btn_settings_favorite_unset": "⚡ Любимый режим: не выбран",
+    "btn_settings_language": "🌐 Язык: {lang}",
+    "btn_settings_notifications": "🔔 Напоминания",
+    "btn_settings_privacy_show": "👤 В топе: показать имя",
+    "btn_settings_privacy_hide": "👤 В топе: скрыть имя",
+    "favorite_choose_difficulty_title": "⚡ **Любимый запуск**\nШаг 1 из 2: выбери сложность.",
+    "favorite_choose_mode_title": "⚡ **Любимый запуск**\nШаг 2 из 2: что решаем на {difficulty}?",
+    "btn_favorite_clear": "🚫 Убрать любимый режим",
+    "btn_back_to_settings": "⬅️ К настройкам",
+    "favorite_saved": "✅ Любимый режим сохранён.",
+    "favorite_cleared": "✅ Любимый режим убран.",
+
     # ---- Training picker ----------------------------------------------
-    "choose_difficulty": "🎓 **Сложность:**",
-    "choose_mode": "🎮 **Режим:**",
+    "choose_difficulty": "🎓 **Сложность**\nВыбери уровень:",
+    "choose_mode": "🎮 **Режим**\nЧто решаем?",
     "difficulty_easy": "🟢 Лёгкий",
     "difficulty_medium": "🟡 Средний",
     "difficulty_hard": "🔴 Сложный",
@@ -34,12 +51,14 @@ TEXTS = {
     "mode_div_rem": "➗ С остатком",
     "mode_pow": "ⁿ Степени",
     "mode_sqrt": "√ Корни",
+    "btn_mode_more": "➕ Ещё режимы…",
+    "btn_mode_less": "➖ Скрыть",
 
     # ---- Training anchor ----------------------------------------------
-    "training_anchor_header": "🧮 Пример {current} / {total}  {bar}",
-    "training_correct_short": "✅",
-    "training_incorrect_short": "❌ → {answer}",
-    "training_skipped_short": "⏭ → {answer}",
+    "training_anchor_header": "🧮 Пример {current} / {total}\n{bar}",
+    "training_correct_short": "✅ Верно!",
+    "training_incorrect_short": "❌ Правильный ответ: **{answer}**",
+    "training_skipped_short": "⏭ Пропущено · ответ: **{answer}**",
     "training_type_answer_invalid": "⚠️ Нужно число.",
     "training_result_v2": (
         "📊 **Результат**\n"
@@ -176,6 +195,12 @@ TEXTS = {
     "admin_backup_critical_error": "❌ Критическая ошибка: `{error}`",
     "admin_backup_wrong_password": "❌ Неверный пароль.",
     "admin_backup_ok": "Бэкап создан!",
+    "admin_startup_notification": (
+        "🟢 **Бот запущен**\n"
+        "────────────────\n"
+        "📅 {timestamp}\n"
+        "🔔 Активных напоминаний: `{reminders_count}`"
+    ),
 
     # ---- Pagination ----------------------------------------------------
     "btn_next": "➡️ Далее",

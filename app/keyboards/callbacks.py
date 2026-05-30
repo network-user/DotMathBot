@@ -67,3 +67,21 @@ class AdminCB(CallbackData, prefix="adm"):
 class TipsCB(CallbackData, prefix="tip"):
     # menu, multiplication, division, general
     action: str
+
+
+class SettingsCB(CallbackData, prefix="set"):
+    """Settings hub + favorite picker (2 steps: difficulty → mode).
+
+    action:
+      - "open"               — show the settings menu
+      - "favorite_open"      — step 1: show difficulty picker
+      - "favorite_difficulty"— step 2: difficulty chosen, show mode picker (carries ``difficulty``)
+      - "favorite_more"      — expand mode picker (carries ``difficulty``)
+      - "favorite_less"      — collapse mode picker (carries ``difficulty``)
+      - "favorite_set"       — save ``mode`` + ``difficulty`` as the user's favorite
+      - "favorite_clear"     — clear both columns
+    """
+
+    action: str
+    mode: Optional[str] = None
+    difficulty: Optional[str] = None

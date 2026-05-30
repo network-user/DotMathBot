@@ -10,6 +10,7 @@ from app.keyboards.callbacks import (
     MenuCB,
     NotifCB,
     ProfileCB,
+    SettingsCB,
     TipsCB,
     TrainingCB,
 )
@@ -31,15 +32,31 @@ class TestMainMenu:
     def test_returns_markup(self):
         kb = InlineKeyboards.main_menu("ru")
         assert kb.inline_keyboard
-        assert len(kb.inline_keyboard) >= 6
+        # Without a favorite: training+daily / profile+top / tips+settings → 3 rows
+        assert len(kb.inline_keyboard) == 3
 
-    def test_contains_training_and_daily(self):
+    def test_contains_core_actions(self):
         kb = InlineKeyboards.main_menu("ru")
         actions = {cb.action for cb in _unpack_all(kb, MenuCB)}
-        assert "training" in actions
-        assert "daily" in actions
-        assert "profile" in actions
-        assert "lang_en" in actions and "lang_ru" in actions
+        assert {"training", "daily", "profile", "leaderboard", "tips", "settings"} <= actions
+
+    def test_language_buttons_not_in_main_menu(self):
+        # Language toggles moved to Settings.
+        kb = InlineKeyboards.main_menu("ru")
+        actions = {cb.action for cb in _unpack_all(kb, MenuCB)}
+        assert "lang_en" not in actions and "lang_ru" not in actions
+
+    def test_quick_start_renders_when_favorite_set(self):
+        kb = InlineKeyboards.main_menu("ru", favorite_mode="mult")
+        actions = {cb.action for cb in _unpack_all(kb, MenuCB)}
+        assert "quick_start" in actions
+        # First row is the full-width Quick Start.
+        assert len(kb.inline_keyboard[0]) == 1
+
+    def test_quick_start_absent_when_favorite_unset(self):
+        kb = InlineKeyboards.main_menu("ru")
+        actions = {cb.action for cb in _unpack_all(kb, MenuCB)}
+        assert "quick_start" not in actions
 
     def test_daily_done_marker(self):
         kb_done = InlineKeyboards.main_menu("ru", daily_done=True)
@@ -65,13 +82,109 @@ class TestDifficultySelection:
 
 
 class TestModeSelection:
-    def test_has_all_modes(self):
-        kb = InlineKeyboards.mode_selection("ru")
+    def test_collapsed_shows_only_primary_modes(self):
+        kb = InlineKeyboards.mode_selection("ru", expanded=False)
         modes = {
             cb.mode for cb in _unpack_all(kb, TrainingCB) if cb.action == "mode"
         }
-        for expected in ("choose", "mult", "div", "mixed"):
-            assert expected in modes
+        assert modes == {"mult", "div", "mixed", "choose"}
+
+    def test_collapsed_has_more_toggle(self):
+        kb = InlineKeyboards.mode_selection("ru", expanded=False)
+        actions = {cb.action for cb in _unpack_all(kb, TrainingCB)}
+        assert "mode_more" in actions
+        assert "mode_less" not in actions
+
+    def test_expanded_shows_all_modes(self):
+        kb = InlineKeyboards.mode_selection("ru", expanded=True)
+        modes = {
+            cb.mode for cb in _unpack_all(kb, TrainingCB) if cb.action == "mode"
+        }
+        assert modes == {"mult", "div", "mixed", "choose", "add", "sub", "div_rem", "pow", "sqrt"}
+
+    def test_expanded_has_less_toggle(self):
+        kb = InlineKeyboards.mode_selection("ru", expanded=True)
+        actions = {cb.action for cb in _unpack_all(kb, TrainingCB)}
+        assert "mode_less" in actions
+
+    def test_back_button(self):
+        kb = InlineKeyboards.mode_selection("ru")
+        backs = _unpack_all(kb, BackCB)
+        assert any(cb.action == "menu" for cb in backs)
+
+
+class TestSettingsMenu:
+    def test_renders_with_all_entries(self):
+        kb = InlineKeyboards.settings_menu("ru")
+        s_actions = {cb.action for cb in _unpack_all(kb, SettingsCB)}
+        m_actions = {cb.action for cb in _unpack_all(kb, MenuCB)}
+        assert "favorite_open" in s_actions
+        assert "notifications" in m_actions
+        assert "lang_ru" in m_actions and "lang_en" in m_actions
+
+    def test_favorite_label_uses_mode_when_set(self):
+        kb = InlineKeyboards.settings_menu("ru", favorite_mode="mult")
+        flat = [b for row in kb.inline_keyboard for b in row]
+        fav_btn = next(b for b in flat if "Любимый" in b.text)
+        assert "Умножение" in fav_btn.text
+
+    def test_privacy_button_text_flips_with_state(self):
+        shown = InlineKeyboards.settings_menu("ru", show_in_top=True)
+        hidden = InlineKeyboards.settings_menu("ru", show_in_top=False)
+        shown_texts = [b.text for row in shown.inline_keyboard for b in row]
+        hidden_texts = [b.text for row in hidden.inline_keyboard for b in row]
+        assert any("скрыть" in t.lower() for t in shown_texts)
+        assert any("показать" in t.lower() for t in hidden_texts)
+
+
+class TestFavoriteDifficultySelection:
+    def test_has_all_difficulties(self):
+        kb = InlineKeyboards.favorite_difficulty_selection("ru")
+        diffs = {
+            cb.difficulty
+            for cb in _unpack_all(kb, SettingsCB)
+            if cb.action == "favorite_difficulty"
+        }
+        assert diffs == {"easy", "medium", "hard"}
+
+    def test_marks_current_choice(self):
+        kb = InlineKeyboards.favorite_difficulty_selection("ru", current_difficulty="hard")
+        flat = [b for row in kb.inline_keyboard for b in row]
+        hard_btn = next(b for b in flat if "Сложный" in b.text)
+        assert hard_btn.text.startswith("•") and hard_btn.text.endswith("•")
+
+
+class TestFavoriteModeSelection:
+    def test_marks_current_choice(self):
+        kb = InlineKeyboards.favorite_mode_selection("ru", current_mode="mult")
+        flat = [b for row in kb.inline_keyboard for b in row]
+        mult_btn = next(b for b in flat if "Умножение" in b.text)
+        assert mult_btn.text.startswith("•") and mult_btn.text.endswith("•")
+
+    def test_clear_only_when_current_set(self):
+        with_current = InlineKeyboards.favorite_mode_selection("ru", current_mode="mult")
+        without = InlineKeyboards.favorite_mode_selection("ru", current_mode=None)
+        with_actions = {cb.action for cb in _unpack_all(with_current, SettingsCB)}
+        without_actions = {cb.action for cb in _unpack_all(without, SettingsCB)}
+        assert "favorite_clear" in with_actions
+        assert "favorite_clear" not in without_actions
+
+    def test_expand_collapse_toggle(self):
+        collapsed = InlineKeyboards.favorite_mode_selection("ru", expanded=False)
+        expanded = InlineKeyboards.favorite_mode_selection("ru", expanded=True)
+        c_actions = {cb.action for cb in _unpack_all(collapsed, SettingsCB)}
+        e_actions = {cb.action for cb in _unpack_all(expanded, SettingsCB)}
+        assert "favorite_more" in c_actions and "favorite_less" not in c_actions
+        assert "favorite_less" in e_actions and "favorite_more" not in e_actions
+
+    def test_difficulty_carries_through_callback_data(self):
+        kb = InlineKeyboards.favorite_mode_selection("ru", difficulty="hard")
+        set_diffs = {
+            cb.difficulty
+            for cb in _unpack_all(kb, SettingsCB)
+            if cb.action == "favorite_set"
+        }
+        assert set_diffs == {"hard"}
 
 
 class TestNotificationPresetSelection:
@@ -83,16 +196,17 @@ class TestNotificationPresetSelection:
         assert any(cb.action == "menu" for cb in backs)
 
 
-class TestBackToMenu:
+class TestBackOnly:
     def test_has_back_button(self):
-        kb = InlineKeyboards.back_to_menu("ru")
+        kb = InlineKeyboards.back_only("ru")
         backs = _unpack_all(kb, BackCB)
         assert any(cb.action == "menu" for cb in backs)
 
-    def test_has_toggle_top(self):
-        kb = InlineKeyboards.back_to_menu("ru", show_in_top=True)
+    def test_has_no_privacy_toggle(self):
+        # Privacy toggle now lives only in Settings hub.
+        kb = InlineKeyboards.back_only("ru")
         toggles = _unpack_all(kb, ProfileCB)
-        assert any(cb.action == "toggle_top" for cb in toggles)
+        assert not any(cb.action == "toggle_top" for cb in toggles)
 
 
 class TestTrainingAnswerVariants:

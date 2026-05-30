@@ -44,6 +44,11 @@ class User(Base):
 
     show_in_top = Column(Boolean, default=False, nullable=False)
 
+    # NULL = no Quick Start shortcut configured. One of TrainingMode values otherwise.
+    favorite_mode = Column(String, nullable=True)
+    # NULL = Quick Start falls back to MEDIUM. One of Difficulty values otherwise.
+    favorite_difficulty = Column(String, nullable=True)
+
     notification_enabled = Column(Boolean, default=True, nullable=False)
     notification_preset = Column(String, default="three_times", nullable=False)
     custom_notification_times = Column(Text, default="", nullable=True)  # JSON string with HH:MM list

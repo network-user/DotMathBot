@@ -35,8 +35,6 @@ async def test_show_profile_handler(callback):
         "app.handlers.profile.StatsService.get_formatted_profile",
         new_callable=AsyncMock,
         return_value="📊 Профиль",
-    ), patch(
-        "app.handlers.profile.get_user", new_callable=AsyncMock, return_value=None
     ):
         await show_profile_handler(callback, MenuCB(action="profile"))
     callback.message.edit_text.assert_called_once()

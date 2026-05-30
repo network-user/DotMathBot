@@ -8,20 +8,37 @@ TEXTS = {
     "Train daily, build streaks, climb the leaderboard.",
     "welcome_fallback_name": "friend",
     "main_menu": "🏠 **Main menu**\nChoose an action:",
-    "btn_daily_challenge": "🎯 Daily challenge",
+    "btn_daily_challenge": "📅 Daily",
     "btn_start_training": "🎓 Training",
-    "btn_my_profile": "📊 Profile",
-    "btn_notifications": "⚙️ Notifications",
+    "btn_my_profile": "👤 Profile",
+    "btn_notifications": "🔔 Notifications",
     "btn_leaderboard": "🏆 Top",
     "btn_tips": "💡 Tips",
+    "btn_settings": "⚙️ Settings",
+    "btn_quick_start": "⚡ Quick start: {mode}",
     "btn_back": "← Back",
     "btn_back_to_menu": "🏠 To menu",
     "btn_lang_en": "🌐 EN",
     "btn_lang_ru": "🌐 RU",
 
+    # ---- Settings -----------------------------------------------------
+    "settings_title": "⚙️ **Settings**\nTune the bot to your taste:",
+    "btn_settings_favorite": "⚡ Favorite mode: {mode}",
+    "btn_settings_favorite_unset": "⚡ Favorite mode: not set",
+    "btn_settings_language": "🌐 Language: {lang}",
+    "btn_settings_notifications": "🔔 Reminders",
+    "btn_settings_privacy_show": "👤 In top: show name",
+    "btn_settings_privacy_hide": "👤 In top: hide name",
+    "favorite_choose_difficulty_title": "⚡ **Favorite session**\nStep 1 of 2: pick difficulty.",
+    "favorite_choose_mode_title": "⚡ **Favorite session**\nStep 2 of 2: what to solve at {difficulty}?",
+    "btn_favorite_clear": "🚫 Clear favorite",
+    "btn_back_to_settings": "⬅️ Back to settings",
+    "favorite_saved": "✅ Favorite mode saved.",
+    "favorite_cleared": "✅ Favorite mode cleared.",
+
     # ---- Training picker ----------------------------------------------
-    "choose_difficulty": "🎓 **Difficulty:**",
-    "choose_mode": "🎮 **Mode:**",
+    "choose_difficulty": "🎓 **Difficulty**\nPick a level:",
+    "choose_mode": "🎮 **Mode**\nWhat are we solving?",
     "difficulty_easy": "🟢 Easy",
     "difficulty_medium": "🟡 Medium",
     "difficulty_hard": "🔴 Hard",
@@ -34,12 +51,14 @@ TEXTS = {
     "mode_div_rem": "➗ With remainder",
     "mode_pow": "ⁿ Powers",
     "mode_sqrt": "√ Square roots",
+    "btn_mode_more": "➕ More modes…",
+    "btn_mode_less": "➖ Hide",
 
     # ---- Training anchor ----------------------------------------------
-    "training_anchor_header": "🧮 Problem {current} / {total}  {bar}",
-    "training_correct_short": "✅",
-    "training_incorrect_short": "❌ → {answer}",
-    "training_skipped_short": "⏭ → {answer}",
+    "training_anchor_header": "🧮 Problem {current} / {total}\n{bar}",
+    "training_correct_short": "✅ Correct!",
+    "training_incorrect_short": "❌ Correct answer: **{answer}**",
+    "training_skipped_short": "⏭ Skipped · answer: **{answer}**",
     "training_type_answer_invalid": "⚠️ A number is expected.",
     "training_result_v2": (
         "📊 **Result**\n"
@@ -149,7 +168,7 @@ TEXTS = {
     "🔴 Hard — up to 999\n\n"
     "🔥 Streak grows with daily practice.",
     "internal_error": "⚠️ Internal error. Try again later.",
-    "language_changed": "🌐 Язык изменён на русский.",
+    "language_changed": "🌐 Switched to Russian.",
     "language_changed_en": "🌐 Language set to English.",
 
     # ---- Admin ---------------------------------------------------------
@@ -176,6 +195,12 @@ TEXTS = {
     "admin_backup_critical_error": "❌ Critical error: `{error}`",
     "admin_backup_wrong_password": "❌ Wrong password.",
     "admin_backup_ok": "Backup created!",
+    "admin_startup_notification": (
+        "🟢 **Bot started**\n"
+        "────────────────\n"
+        "📅 {timestamp}\n"
+        "🔔 Active reminders: `{reminders_count}`"
+    ),
 
     # ---- Pagination ----------------------------------------------------
     "btn_next": "➡️ Next",

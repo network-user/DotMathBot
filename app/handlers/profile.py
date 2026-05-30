@@ -3,8 +3,8 @@ import logging
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
 
-from app.database.db import get_user, get_user_language, update_user_show_in_top
-from app.keyboards.callbacks import LeaderboardCB, MenuCB, ProfileCB, TipsCB
+from app.database.db import get_user_language
+from app.keyboards.callbacks import LeaderboardCB, MenuCB, TipsCB
 from app.keyboards.inline import InlineKeyboards
 from app.locales import get_text
 from app.services.hint_service import get_tips
@@ -18,12 +18,10 @@ logger = logging.getLogger(__name__)
 async def show_profile_handler(callback: CallbackQuery, callback_data: MenuCB) -> None:
     lang = await get_user_language(callback.from_user.id)
     profile_text = await StatsService.get_formatted_profile(callback.from_user.id, lang)
-    user = await get_user(callback.from_user.id)
-    show_in_top = user.show_in_top if user else True
 
     await callback.message.edit_text(
         profile_text,
-        reply_markup=InlineKeyboards.back_to_menu(lang, show_in_top),
+        reply_markup=InlineKeyboards.back_only(lang),
         parse_mode="Markdown",
     )
     await callback.answer()
@@ -62,29 +60,6 @@ async def show_leaderboard_mode_handler(
         parse_mode="Markdown",
     )
     await callback.answer()
-
-
-@router.callback_query(ProfileCB.filter(F.action == "toggle_top"))
-async def toggle_top_privacy_handler(
-    callback: CallbackQuery, callback_data: ProfileCB
-) -> None:
-    user = await get_user(callback.from_user.id)
-    if not user:
-        await callback.answer("Ошибка: пользователь не найден.")
-        return
-
-    new_value = not user.show_in_top
-    await update_user_show_in_top(callback.from_user.id, new_value)
-
-    lang = await get_user_language(callback.from_user.id)
-    profile_text = await StatsService.get_formatted_profile(callback.from_user.id, lang)
-
-    await callback.message.edit_text(
-        profile_text,
-        reply_markup=InlineKeyboards.back_to_menu(lang, new_value),
-        parse_mode="Markdown",
-    )
-    await callback.answer("Настройки обновлены!")
 
 
 @router.callback_query(MenuCB.filter(F.action == "tips"))

@@ -17,7 +17,7 @@ async def set_bot_commands(bot: Bot) -> None:
         BotCommand(command="profile", description="📊 Мой профиль"),
         BotCommand(command="top", description="🏆 Топ пользователей"),
         BotCommand(command="tips", description="💡 Шпаргалки"),
-        BotCommand(command="settings", description="⚙️ Настройки уведомлений"),
+        BotCommand(command="settings", description="⚙️ Настройки"),
         BotCommand(command="help", description="❓ Помощь"),
     ]
     await bot.set_my_commands(commands)

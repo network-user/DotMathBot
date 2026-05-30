@@ -4,7 +4,6 @@ from __future__ import annotations
 import pytest
 
 from app.utils.ui import (
-    SEPARATOR,
     format_problem_anchor,
     format_seconds,
     render_progress_bar,
@@ -81,17 +80,16 @@ def test_format_seconds_negative_returns_empty():
 # ---- format_problem_anchor ------------------------------------------------
 
 
-def test_anchor_has_separator_lines(monkeypatch):
-    # Stub i18n so the test doesn't depend on real locale wording.
+def test_anchor_renders_expression_in_bold(monkeypatch):
     from app.utils import ui
 
     monkeypatch.setattr(
-        ui, "get_text", lambda k, lang: "🧮 {current} / {total}  {bar}"
+        ui, "get_text", lambda k, lang: "🧮 {current} / {total}\n{bar}"
     )
     text = format_problem_anchor("47 + 28", current=3, total=10, lang="ru")
-    assert SEPARATOR in text
-    assert text.count(SEPARATOR) == 2
-    assert "47 + 28" in text
+    assert "**47 + 28 = ?**" in text
+    # Blocks are separated by blank lines, not by hardcoded rules.
+    assert "\n\n" in text
 
 
 def test_anchor_includes_streak_and_time(monkeypatch):
@@ -100,11 +98,16 @@ def test_anchor_includes_streak_and_time(monkeypatch):
     monkeypatch.setattr(
         ui, "get_text", lambda k, lang: "{current}/{total} {bar}"
     )
-    text = format_problem_anchor(
+    text_ru = format_problem_anchor(
         "5 * 5", current=2, total=5, lang="ru", streak=3, last_time_s=4.2
     )
-    assert "🔥 streak 3" in text
-    assert "⏱ 4.2s" in text
+    assert "🔥 серия 3" in text_ru
+    assert "⏱ 4.2s" in text_ru
+
+    text_en = format_problem_anchor(
+        "5 * 5", current=2, total=5, lang="en", streak=3, last_time_s=4.2
+    )
+    assert "🔥 streak 3" in text_en
 
 
 def test_anchor_omits_zero_streak(monkeypatch):

@@ -70,9 +70,16 @@ def format_problem_anchor(
 ) -> str:
     """Build the standard problem screen body.
 
-    ``expression`` is the math expression to display (already formatted).
-    ``feedback_prefix`` is a single short line above the header (e.g. "✅"
-    or "❌ → 75") shown after answering the previous problem.
+    Layout (top-to-bottom, blank lines for breathing room):
+
+        {feedback from previous turn}
+
+        🧮 Пример N / M
+        ▓▓▓░░░░░░░░░
+
+           **expression = ?**
+
+        🔥 серия 3   ⏱ 4.2s
     """
     bar = render_progress_bar(current, total)
     header = get_text("training_anchor_header", lang).format(
@@ -81,21 +88,19 @@ def format_problem_anchor(
 
     footer_parts: list[str] = []
     if streak > 0:
-        footer_parts.append(f"🔥 streak {streak}")
+        footer_parts.append(f"🔥 серия {streak}" if lang == "ru" else f"🔥 streak {streak}")
     if last_time_s is not None:
         footer_parts.append(f"⏱ {format_seconds(last_time_s)}")
-    footer = "  ".join(footer_parts)
+    footer = "   ".join(footer_parts)
 
-    lines = []
+    blocks: list[str] = []
     if feedback_prefix:
-        lines.append(feedback_prefix)
-    lines.append(header)
-    lines.append(SEPARATOR)
-    lines.append(f"  {expression}")
-    lines.append(SEPARATOR)
+        blocks.append(feedback_prefix)
+    blocks.append(header)
+    blocks.append(f"   **{expression} = ?**")
     if footer:
-        lines.append(footer)
-    return "\n".join(lines)
+        blocks.append(footer)
+    return "\n\n".join(blocks)
 
 
 def format_session_result(

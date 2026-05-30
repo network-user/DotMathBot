@@ -26,6 +26,7 @@ from app.database.db import (
     complete_training_session,
     create_training_session,
     get_session_mistakes,
+    get_user_favorite,
     get_user_language,
     record_problem_answered,
     record_problem_shown,
@@ -73,6 +74,25 @@ async def select_difficulty_handler(
         callback,
         get_text("choose_mode", lang),
         InlineKeyboards.mode_selection(lang),
+    )
+    await callback.answer()
+
+
+@router.callback_query(
+    TrainingCB.filter(F.action.in_({"mode_more", "mode_less"})),
+    TrainingStates.waiting_for_mode,
+)
+async def toggle_mode_expansion_handler(
+    callback: CallbackQuery, callback_data: TrainingCB, state: FSMContext
+) -> None:
+    """Expand/collapse the mode picker without losing the chosen difficulty."""
+    data = await state.get_data()
+    lang = data.get("lang", "ru")
+    expanded = callback_data.action == "mode_more"
+    await safe_edit(
+        callback,
+        get_text("choose_mode", lang),
+        InlineKeyboards.mode_selection(lang, expanded=expanded),
     )
     await callback.answer()
 
@@ -139,6 +159,78 @@ async def start_training_handler(
         get_text("choose_difficulty", lang),
         InlineKeyboards.difficulty_selection(lang),
     )
+    await callback.answer()
+
+
+# Quick Start: skip both pickers, launch a session with the saved favorite.
+# If favorite_difficulty is NULL we default to MEDIUM. If no favorite_mode is
+# saved (race with Settings clearing it), fall back to the normal picker.
+_QUICK_START_DEFAULT_DIFFICULTY = Difficulty.MEDIUM
+
+
+@router.callback_query(MenuCB.filter(F.action == "quick_start"))
+async def quick_start_handler(
+    callback: CallbackQuery, callback_data: MenuCB, state: FSMContext
+) -> None:
+    lang = await get_user_language(callback.from_user.id)
+    favorite_mode, favorite_difficulty = await get_user_favorite(callback.from_user.id)
+    if not favorite_mode:
+        await state.clear()
+        await state.update_data(lang=lang)
+        await state.set_state(TrainingStates.waiting_for_difficulty)
+        await safe_edit(
+            callback,
+            get_text("choose_difficulty", lang),
+            InlineKeyboards.difficulty_selection(lang),
+        )
+        await callback.answer()
+        return
+
+    try:
+        mode = TrainingMode(favorite_mode)
+    except ValueError:
+        await callback.answer()
+        return
+
+    try:
+        difficulty = (
+            Difficulty(favorite_difficulty)
+            if favorite_difficulty
+            else _QUICK_START_DEFAULT_DIFFICULTY
+        )
+    except ValueError:
+        difficulty = _QUICK_START_DEFAULT_DIFFICULTY
+    cfg = DIFFICULTY_CONFIG[difficulty]
+    examples_count = int(cfg["examples_count"])
+    problems = ProblemGenerator.generate_problems(difficulty, mode, examples_count)
+
+    session = await create_training_session(
+        telegram_id=callback.from_user.id,
+        difficulty=difficulty.value,
+        mode=mode.value,
+        total_problems=len(problems),
+    )
+
+    await state.clear()
+    await state.update_data(
+        lang=lang,
+        session_id=session.id,
+        difficulty=difficulty.value,
+        mode=mode.value,
+        problems=problems,
+        idx=0,
+        correct=0,
+        incorrect=0,
+        session_streak=0,
+        last_time_s=None,
+        anchor_chat_id=callback.message.chat.id,
+        anchor_message_id=callback.message.message_id,
+        current_problem_id=None,
+        problem_shown_at=None,
+        session_kind="normal",
+        session_started_at=datetime.now(timezone.utc).isoformat(),
+    )
+    await show_problem(callback, state)
     await callback.answer()
 
 
