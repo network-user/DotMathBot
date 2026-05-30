@@ -2,27 +2,35 @@ import logging
 from datetime import time
 from functools import partial
 
-from aiogram import Router, F
-from aiogram.fsm.state import StatesGroup, State
-from aiogram.types import CallbackQuery, Message
+from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import CallbackQuery, Message
 
+from app.database.db import (
+    get_user,
+    get_user_language,
+    update_user_notifications,
+)
+from app.keyboards.callbacks import MenuCB, NotifCB
 from app.keyboards.inline import InlineKeyboards
-from app.database.db import update_user_notifications, get_user_language, get_user
 from app.locales import get_text
 from app.services.notification_callback import send_training_reminder
 from app.services.notification_service import NotificationService
-from app.utils.constants import NotificationPreset, NOTIFICATION_PRESETS
+from app.utils.constants import NOTIFICATION_PRESETS, NotificationPreset
 
 router = Router()
 logger = logging.getLogger(__name__)
+
 
 class NotificationStates(StatesGroup):
     waiting_for_custom_time = State()
 
 
-@router.callback_query(F.data == "settings_notifications")
-async def settings_notifications_handler(callback: CallbackQuery) -> None:
+@router.callback_query(MenuCB.filter(F.action == "notifications"))
+async def settings_notifications_handler(
+    callback: CallbackQuery, callback_data: MenuCB
+) -> None:
     lang = await get_user_language(callback.from_user.id)
     text = get_text("settings_notifications", lang)
     await callback.message.edit_text(
@@ -33,13 +41,14 @@ async def settings_notifications_handler(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("notify_preset_"))
+@router.callback_query(NotifCB.filter(F.action == "select"))
 async def notify_preset_handler(
     callback: CallbackQuery,
+    callback_data: NotifCB,
     state: FSMContext,
     notification_service: NotificationService,
 ) -> None:
-    preset_str = callback.data.split("_")[-1]
+    preset_str = callback_data.preset
     preset = NotificationPreset(preset_str)
     lang = await get_user_language(callback.from_user.id)
 
@@ -51,7 +60,7 @@ async def notify_preset_handler(
         await callback.message.edit_text(
             text,
             reply_markup=InlineKeyboards.cancel_custom_time(lang),
-            parse_mode="Markdown"
+            parse_mode="Markdown",
         )
         await callback.answer()
         return
@@ -77,7 +86,9 @@ async def notify_preset_handler(
                     times=config["times"],
                     callback=callback_func,
                 )
-                logger.info(f"Scheduled {len(config['times'])} reminders for user {callback.from_user.id}")
+                logger.info(
+                    f"Scheduled {len(config['times'])} reminders for user {callback.from_user.id}"
+                )
 
         if preset == NotificationPreset.DISABLED:
             text = get_text("notifications_disabled", lang)
@@ -97,12 +108,15 @@ async def notify_preset_handler(
             )
 
     except Exception as e:
-        logger.error(f"Failed to update notification schedule for user {callback.from_user.id}: {e}", exc_info=True)
+        logger.error(
+            f"Failed to update notification schedule for user {callback.from_user.id}: {e}",
+            exc_info=True,
+        )
         text = get_text("notification_error", lang)
 
     await callback.message.edit_text(
         text,
-        reply_markup=InlineKeyboards.back_to_menu(lang),
+        reply_markup=InlineKeyboards.back_only(lang),
         parse_mode="Markdown",
     )
     await callback.answer()
@@ -124,7 +138,7 @@ async def custom_time_input_handler(
         await message.answer(
             text,
             reply_markup=InlineKeyboards.cancel_custom_time(lang),
-            parse_mode="Markdown"
+            parse_mode="Markdown",
         )
         return
 
@@ -134,7 +148,7 @@ async def custom_time_input_handler(
     await update_user_notifications(
         message.from_user.id,
         "custom",
-        custom_times=custom_times_str
+        custom_times=custom_times_str,
     )
 
     try:
@@ -151,34 +165,43 @@ async def custom_time_input_handler(
             name=get_text("notify_preset_custom", lang),
             times=times_str,
         )
-        logger.info(f"Scheduled {len(parsed_times)} custom reminders for user {message.from_user.id}")
+        logger.info(
+            f"Scheduled {len(parsed_times)} custom reminders for user {message.from_user.id}"
+        )
 
     except Exception as e:
-        logger.error(f"Failed to schedule custom times for user {message.from_user.id}: {e}", exc_info=True)
+        logger.error(
+            f"Failed to schedule custom times for user {message.from_user.id}: {e}",
+            exc_info=True,
+        )
         text = get_text("notification_error", lang)
 
     await message.answer(
         text,
-        reply_markup=InlineKeyboards.back_to_menu(lang),
-        parse_mode="Markdown"
+        reply_markup=InlineKeyboards.back_only(lang),
+        parse_mode="Markdown",
     )
 
 
-@router.callback_query(F.data == "cancel_custom_time")
-async def cancel_custom_time_handler(callback: CallbackQuery, state: FSMContext) -> None:
+@router.callback_query(NotifCB.filter(F.action == "cancel_custom"))
+async def cancel_custom_time_handler(
+    callback: CallbackQuery, callback_data: NotifCB, state: FSMContext
+) -> None:
     await state.clear()
     lang = await get_user_language(callback.from_user.id)
     text = get_text("custom_time_cancelled", lang)
     await callback.message.edit_text(
         text,
-        reply_markup=InlineKeyboards.back_to_menu(lang),
-        parse_mode="Markdown"
+        reply_markup=InlineKeyboards.back_only(lang),
+        parse_mode="Markdown",
     )
     await callback.answer()
 
 
-@router.callback_query(F.data == "check_notifications")
-async def check_notifications_handler(callback: CallbackQuery) -> None:
+@router.callback_query(NotifCB.filter(F.action == "check"))
+async def check_notifications_handler(
+    callback: CallbackQuery, callback_data: NotifCB
+) -> None:
     lang = await get_user_language(callback.from_user.id)
     user = await get_user(callback.from_user.id)
 
@@ -190,7 +213,6 @@ async def check_notifications_handler(callback: CallbackQuery) -> None:
             preset = NotificationPreset(preset_str)
 
             if preset == NotificationPreset.CUSTOM:
-                from app.services.notification_service import NotificationService
                 custom_times = NotificationService.parse_times(user.custom_notification_times)
 
                 if custom_times:
@@ -212,7 +234,9 @@ async def check_notifications_handler(callback: CallbackQuery) -> None:
                         NotificationPreset.EVENING: "notify_preset_evening",
                         NotificationPreset.THREE_TIMES: "notify_preset_three",
                     }
-                    preset_name = get_text(preset_keys.get(preset, "notify_preset_morning"), lang)
+                    preset_name = get_text(
+                        preset_keys.get(preset, "notify_preset_morning"), lang
+                    )
                     text = get_text("current_notifications", lang).format(
                         name=preset_name,
                         times=times_str,
@@ -224,20 +248,24 @@ async def check_notifications_handler(callback: CallbackQuery) -> None:
 
     await callback.message.edit_text(
         text,
-        reply_markup=InlineKeyboards.back_to_menu(lang),
-        parse_mode="Markdown"
+        reply_markup=InlineKeyboards.back_only(lang),
+        parse_mode="Markdown",
     )
     await callback.answer()
 
 
 def parse_custom_times(text: str) -> list[time]:
     times = []
-    parts = [p.strip() for p in text.replace(',', ' ').replace(';', ' ').split() if p.strip()]
+    parts = [
+        p.strip()
+        for p in text.replace(",", " ").replace(";", " ").split()
+        if p.strip()
+    ]
 
     for part in parts:
         try:
-            if ':' in part:
-                h, m = part.split(':')
+            if ":" in part:
+                h, m = part.split(":")
                 hour, minute = int(h), int(m)
             elif len(part) == 4:
                 hour, minute = int(part[:2]), int(part[2:])

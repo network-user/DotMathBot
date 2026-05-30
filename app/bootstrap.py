@@ -9,7 +9,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from app.config import BOT_TOKEN
 from app.database.db import init_db
-from app.handlers import start, training, profile, notifications, admin
+from app.handlers import admin, daily, notifications, profile, start, training
 from app.middlewares.error_middleware import ErrorMiddleware
 from app.services.backup_service import BackupService
 from app.services.notification_loader import load_scheduled_users
@@ -53,6 +53,7 @@ async def setup_app() -> App:
 
     logger.info("Registering handlers...")
     dp.include_router(start.router)
+    dp.include_router(daily.router)
     dp.include_router(training.router)
     dp.include_router(profile.router)
     dp.include_router(notifications.router)

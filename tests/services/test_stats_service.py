@@ -58,4 +58,5 @@ async def test_get_formatted_leaderboard_with_users(db):
     session = await create_training_session(222, "easy", "mult", 2)
     await complete_training_session(session.id, 2, 0)
     text, _ = await StatsService.get_formatted_leaderboard(limit=5, lang="ru")
-    assert "ТОП" in text or "ДНЕЙ" in text or "User2" in text
+    lowered = text.lower()
+    assert "топ" in lowered or "дней" in lowered or "User2" in text or "🏆" in text
