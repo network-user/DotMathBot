@@ -65,7 +65,7 @@ async def test_start_handler_creates_user_and_sends_welcome(message, state):
         await start_handler(message, state)
     assert message.answer.call_count == 2
     welcome_text = message.answer.call_args_list[0][0][0]
-    assert "Math Trainer" in welcome_text or "Привет" in welcome_text
+    assert "ЦифроБот" in welcome_text or "Привет" in welcome_text
     state.clear.assert_called_once()
 
 

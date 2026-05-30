@@ -4,7 +4,7 @@
 TEXTS = {
     # ---- Welcome / menu ------------------------------------------------
     "welcome": "👋 Hi, {name}!\n\n"
-    "🎯 This is **Math Trainer** — a mental arithmetic practice bot.\n\n"
+    "🎯 This is **ЦифроБот** — a mental arithmetic practice bot.\n\n"
     "Train daily, build streaks, climb the leaderboard.",
     "welcome_fallback_name": "friend",
     "main_menu": "🏠 **Main menu**\nChoose an action:",
@@ -60,6 +60,7 @@ TEXTS = {
     "training_incorrect_short": "❌ Wrong",
     "training_skipped_short": "⏭ Skipped",
     "training_retry_banner": "🔁 _Mistakes retry_",
+    "training_streak_footer": "🔥 streak {streak}",
     "training_type_answer_invalid": "⚠️ A number is expected.",
     "training_result_v2": (
         "📊 **Result**\n"
@@ -69,8 +70,8 @@ TEXTS = {
     ),
     "training_no_mistakes": "No mistakes — nothing to retry!",
     "training_abort": "❌ Training cancelled.",
-    "btn_skip": "⏭ skip",
-    "btn_exit_training": "✕ exit",
+    "btn_skip": "⏭ Skip",
+    "btn_exit_training": "✕ Exit",
     "btn_retry_mistakes": "🔁 Retry mistakes",
     "btn_new_training": "🎓 New training",
 

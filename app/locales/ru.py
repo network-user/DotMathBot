@@ -4,7 +4,7 @@
 TEXTS = {
     # ---- Welcome / menu ------------------------------------------------
     "welcome": "👋 Привет, {name}!\n\n"
-    "🎯 Это **Math Trainer** — бот для тренировки устного счёта.\n\n"
+    "🎯 Это **ЦифроБот** — бот для тренировки устного счёта.\n\n"
     "Тренируйся каждый день, собирай серии и поднимайся в топе.",
     "welcome_fallback_name": "друже",
     "main_menu": "🏠 **Главное меню**\nВыбери действие:",
@@ -60,6 +60,7 @@ TEXTS = {
     "training_incorrect_short": "❌ Неверно",
     "training_skipped_short": "⏭ Пропущено",
     "training_retry_banner": "🔁 _Перерешка ошибок_",
+    "training_streak_footer": "🔥 серия {streak}",
     "training_type_answer_invalid": "⚠️ Нужно число.",
     "training_result_v2": (
         "📊 **Результат**\n"
@@ -69,8 +70,8 @@ TEXTS = {
     ),
     "training_no_mistakes": "Ошибок не было — перерешивать нечего!",
     "training_abort": "❌ Тренировка прервана.",
-    "btn_skip": "⏭ skip",
-    "btn_exit_training": "✕ выйти",
+    "btn_skip": "⏭ Пропустить",
+    "btn_exit_training": "✕ Выйти",
     "btn_retry_mistakes": "🔁 Перерешать ошибки",
     "btn_new_training": "🎓 Новая тренировка",
 

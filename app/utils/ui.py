@@ -90,7 +90,7 @@ def format_problem_anchor(
 
     footer_parts: list[str] = []
     if streak > 0:
-        footer_parts.append(f"🔥 серия {streak}" if lang == "ru" else f"🔥 streak {streak}")
+        footer_parts.append(get_text("training_streak_footer", lang).format(streak=streak))
     if last_time_s is not None:
         footer_parts.append(f"⏱ {format_seconds(last_time_s)}")
     footer = "   ".join(footer_parts)

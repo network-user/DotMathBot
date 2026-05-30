@@ -92,12 +92,20 @@ def test_anchor_renders_expression_in_bold(monkeypatch):
     assert "\n\n" in text
 
 
+def _stub_get_text(k, lang):
+    """Per-key stub so callers that .format(streak=...) don't trip on a
+    fixed-template mock that only knows the anchor header's placeholders."""
+    if k == "training_streak_footer":
+        return "🔥 серия {streak}" if lang == "ru" else "🔥 streak {streak}"
+    if k == "training_retry_banner":
+        return "🔁 retry"
+    return "{current}/{total} {bar}"
+
+
 def test_anchor_includes_streak_and_time(monkeypatch):
     from app.utils import ui
 
-    monkeypatch.setattr(
-        ui, "get_text", lambda k, lang: "{current}/{total} {bar}"
-    )
+    monkeypatch.setattr(ui, "get_text", _stub_get_text)
     text_ru = format_problem_anchor(
         "5 * 5", current=2, total=5, lang="ru", streak=3, last_time_s=4.2
     )
@@ -113,9 +121,7 @@ def test_anchor_includes_streak_and_time(monkeypatch):
 def test_anchor_omits_zero_streak(monkeypatch):
     from app.utils import ui
 
-    monkeypatch.setattr(
-        ui, "get_text", lambda k, lang: "{current}/{total} {bar}"
-    )
+    monkeypatch.setattr(ui, "get_text", _stub_get_text)
     text = format_problem_anchor("1 + 1", current=1, total=5, lang="ru", streak=0)
     assert "🔥" not in text
 
