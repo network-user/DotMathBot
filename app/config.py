@@ -14,7 +14,7 @@ DATABASE_URL: str = os.getenv("DATABASE_URL", "")
 if not DATABASE_URL:
     raise ValueError(
         "DATABASE_URL is not set. Example: "
-        "postgresql+asyncpg://dotmath:password@localhost:5432/dotmath"
+        "postgresql+asyncpg://dotmath:password@postgres:5432/dotmath"
     )
 
 # Filesystem path used by services like BackupService and Alembic for ensuring
