@@ -7,8 +7,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-dotmath}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-dotmath}
-    # Postgres доступен только внутри docker-сети (бот подключается по имени "postgres").
-    # Для ручного доступа с сервера раскомментируйте строку ниже:
+    # Postgres доступен только внутри docker-сети.
+    # Для ручного доступа с сервера раскомментируйте:
     # ports:
     #   - "127.0.0.1:5432:5432"
     volumes:
@@ -21,25 +21,50 @@ services:
     networks:
       - dotmath
 
+  redis:
+    image: redis:7-alpine
+    container_name: dotmath-redis
+    restart: unless-stopped
+    # appendonly yes makes FSM state survive container restarts.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - dotmath
+
   bot:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: dotmathbot-bot
     container_name: dotmath-bot
     restart: unless-stopped
-    env_file:
-      - .env
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      # Inside the compose network, the bot reaches Postgres/Redis by service
+      # name. ``.env`` defaults to localhost for host runs; these override.
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-dotmath}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-dotmath}
+      REDIS_URL: redis://redis:6379/0
     volumes:
+      # Backups + logs live on the host so they survive container rebuilds.
+      - ./app/data:/app/app/data
       - ./logs:/app/logs
-      - bot_data:/app/app/data
     networks:
       - dotmath
 
 volumes:
   pgdata:
-  bot_data:
+  redisdata:
 
 networks:
   dotmath:

@@ -1,4 +1,18 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey, Table, func
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Column,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Table,
+    Text,
+    UniqueConstraint,
+    func,
+)
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -29,6 +43,11 @@ class User(Base):
     language = Column(String, default="ru", nullable=True)  # ru, en
 
     show_in_top = Column(Boolean, default=False, nullable=False)
+
+    # NULL = no Quick Start shortcut configured. One of TrainingMode values otherwise.
+    favorite_mode = Column(String, nullable=True)
+    # NULL = Quick Start falls back to MEDIUM. One of Difficulty values otherwise.
+    favorite_difficulty = Column(String, nullable=True)
 
     notification_enabled = Column(Boolean, default=True, nullable=False)
     notification_preset = Column(String, default="three_times", nullable=False)
@@ -89,7 +108,61 @@ class Problem(Base):
     # op-specific extras: remainder, display_form, etc.
     metadata_json = Column(Text, nullable=True)
 
+    # Per-problem timing — populated by record_problem_shown / _answered.
+    # NULL on rows created before migration 0002 or on skipped problems.
+    shown_at = Column(DateTime(timezone=True), nullable=True)
+    answered_at = Column(DateTime(timezone=True), nullable=True)
+
     session = relationship("TrainingSession", back_populates="problems")
 
     def __repr__(self) -> str:
         return f"<Problem {self.first_number} {self.operation} {self.second_number}>"
+
+
+class DailyChallenge(Base):
+    """One shared set of 10 problems per calendar day (Europe/Moscow).
+
+    Lazily created on the first user request via
+    ``get_or_create_daily_challenge``; the UNIQUE constraint on
+    ``challenge_date`` together with ``ON CONFLICT DO NOTHING`` makes
+    concurrent first-clicks safe.
+    """
+
+    __tablename__ = "daily_challenges"
+
+    id = Column(Integer, primary_key=True)
+    challenge_date = Column(Date, nullable=False, unique=True)
+    seed = Column(BigInteger, nullable=False)
+    # List[dict] of frozen Problem specs; consumed by the daily handler.
+    problem_specs = Column(JSONB, nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    def __repr__(self) -> str:
+        return f"<DailyChallenge {self.challenge_date}>"
+
+
+class DailyChallengeAttempt(Base):
+    """One row per (user, calendar day). UNIQUE enforces single attempt."""
+
+    __tablename__ = "daily_challenge_attempts"
+    __table_args__ = (
+        UniqueConstraint("user_id", "challenge_date", name="uq_dca_user_date"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    challenge_date = Column(Date, nullable=False)
+    started_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    correct = Column(Integer, default=0, nullable=False)
+    incorrect = Column(Integer, default=0, nullable=False)
+    total_time_ms = Column(BigInteger, default=0, nullable=False)
+
+    user = relationship("User")
+
+    def __repr__(self) -> str:
+        return f"<DailyChallengeAttempt user={self.user_id} date={self.challenge_date}>"

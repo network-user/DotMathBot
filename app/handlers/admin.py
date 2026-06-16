@@ -15,6 +15,7 @@ from app.database.db import (
     get_total_users_count,
     get_user_language,
 )
+from app.keyboards.callbacks import AdminCB
 from app.keyboards.inline import InlineKeyboards
 from app.locales import get_text
 
@@ -48,8 +49,8 @@ async def admin_panel_handler(message: Message) -> None:
     )
 
 
-@router.callback_query(F.data == "admin_main")
-async def admin_main_callback(callback: CallbackQuery) -> None:
+@router.callback_query(AdminCB.filter(F.action == "main"))
+async def admin_main_callback(callback: CallbackQuery, callback_data: AdminCB) -> None:
     lang = await get_user_language(callback.from_user.id)
     if not is_admin(callback.from_user.id):
         await callback.answer(get_text("admin_no_rights", lang), show_alert=True)
@@ -62,8 +63,8 @@ async def admin_main_callback(callback: CallbackQuery) -> None:
     )
 
 
-@router.callback_query(F.data == "admin_stats")
-async def admin_stats_handler(callback: CallbackQuery) -> None:
+@router.callback_query(AdminCB.filter(F.action == "stats"))
+async def admin_stats_handler(callback: CallbackQuery, callback_data: AdminCB) -> None:
     if not is_admin(callback.from_user.id):
         return
 
@@ -92,13 +93,13 @@ async def admin_stats_handler(callback: CallbackQuery) -> None:
     )
 
 
-@router.callback_query(F.data.regexp(r"admin_users:(\d+)"))
-async def admin_users_list_handler(callback: CallbackQuery) -> None:
+@router.callback_query(AdminCB.filter(F.action == "users"))
+async def admin_users_list_handler(callback: CallbackQuery, callback_data: AdminCB) -> None:
     if not is_admin(callback.from_user.id):
         return
 
     lang = await get_user_language(callback.from_user.id)
-    offset = int(callback.data.split(":")[1])
+    offset = callback_data.page
     limit = 10
     users = await get_all_users_paginated(limit, offset)
 
@@ -130,8 +131,8 @@ async def admin_users_list_handler(callback: CallbackQuery) -> None:
     )
 
 
-@router.callback_query(F.data == "admin_backup")
-async def admin_backup_handler(callback: CallbackQuery) -> None:
+@router.callback_query(AdminCB.filter(F.action == "backup"))
+async def admin_backup_handler(callback: CallbackQuery, callback_data: AdminCB) -> None:
     if not is_admin(callback.from_user.id):
         return
 
@@ -143,8 +144,10 @@ async def admin_backup_handler(callback: CallbackQuery) -> None:
     await callback.answer(get_text("admin_backup_ok", lang), show_alert=True)
 
 
-@router.callback_query(F.data == "admin_download_backup")
-async def admin_download_backup_prompt(callback: CallbackQuery, state: FSMContext) -> None:
+@router.callback_query(AdminCB.filter(F.action == "download"))
+async def admin_download_backup_prompt(
+    callback: CallbackQuery, callback_data: AdminCB, state: FSMContext
+) -> None:
     if not is_admin(callback.from_user.id):
         return
 

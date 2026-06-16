@@ -31,3 +31,28 @@ class TestGetText:
     def test_en_welcome_format(self):
         text = get_text("welcome", "en").format(name="User")
         assert "User" in text
+
+
+class TestFairRetryFeedback:
+    """The wrong/skipped feedback templates must NOT interpolate the correct
+    answer. Both ❌ and ⏭ feed into the "Retry mistakes" flow — revealing
+    the answer would turn retry into memorisation. See feedback memory
+    "training_feedback".
+    """
+
+    @pytest.mark.parametrize("lang", ["ru", "en"])
+    @pytest.mark.parametrize(
+        "key", ["training_incorrect_short", "training_skipped_short"]
+    )
+    def test_no_answer_placeholder(self, lang, key):
+        template = get_text(key, lang)
+        assert "{answer}" not in template, (
+            f"{key} ({lang}) contains '{{answer}}' — would leak the correct "
+            "answer to the user and break Retry mistakes."
+        )
+
+    @pytest.mark.parametrize("lang", ["ru", "en"])
+    def test_correct_feedback_template_is_static(self, lang):
+        # Sanity: the ✅ template doesn't need formatting either.
+        template = get_text("training_correct_short", lang)
+        assert "{" not in template

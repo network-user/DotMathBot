@@ -1,14 +1,22 @@
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Awaitable, Callable, Optional
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, func, desc, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import selectinload
 from datetime import datetime, date, timedelta, timezone
 import json
 
 from app.config import DATABASE_URL, DB_PATH
-from app.database.models import Base, User, TrainingSession, Problem
+from app.database.models import (
+    Base,
+    DailyChallenge,
+    DailyChallengeAttempt,
+    Problem,
+    TrainingSession,
+    User,
+)
 
 DIFFICULTY_WEIGHTS = {"easy": 1, "medium": 2, "hard": 3}
 
@@ -436,6 +444,34 @@ async def update_user_show_in_top(telegram_id: int, value: bool) -> None:
             await session.commit()
 
 
+async def get_user_favorite(telegram_id: int) -> tuple[Optional[str], Optional[str]]:
+    """Return ``(favorite_mode, favorite_difficulty)`` — either may be None."""
+    user = await get_user(telegram_id)
+    if not user:
+        return None, None
+    return user.favorite_mode, user.favorite_difficulty
+
+
+async def update_user_favorite(
+    telegram_id: int,
+    mode: Optional[str],
+    difficulty: Optional[str],
+) -> None:
+    """Atomically set both favorite_mode and favorite_difficulty.
+
+    Pass None for either to clear it. Used by the Settings "favorite" flow
+    so the two columns can't drift out of sync.
+    """
+    async with async_session_maker() as session:
+        stmt = select(User).where(User.telegram_id == str(telegram_id))
+        result = await session.execute(stmt)
+        user = result.scalar_one_or_none()
+        if user:
+            user.favorite_mode = mode
+            user.favorite_difficulty = difficulty
+            await session.commit()
+
+
 async def get_total_users_count() -> int:
     async with async_session_maker() as session:
         stmt = select(func.count(User.id))
@@ -456,3 +492,220 @@ async def get_all_users_paginated(limit: int = 10, offset: int = 0) -> list[User
         stmt = select(User).order_by(desc(User.created_at)).offset(offset).limit(limit)
         result = await session.execute(stmt)
         return list(result.scalars().all())
+
+
+# ---------------------------------------------------------------------------
+# Per-problem persistence (new in migration 0002)
+# ---------------------------------------------------------------------------
+
+
+async def record_problem_shown(
+    session_id: int,
+    first_number: int,
+    second_number: int,
+    operation: str,
+    correct_answer: int,
+    metadata: Optional[dict] = None,
+) -> int:
+    """Insert a Problem row with shown_at=now() and return its id.
+
+    Called when a problem is rendered to the user — the answered_at /
+    user_answer / is_correct fields stay NULL until record_problem_answered.
+    """
+    async with async_session_maker() as session:
+        problem = Problem(
+            session_id=session_id,
+            first_number=first_number,
+            second_number=second_number,
+            operation=operation,
+            correct_answer=correct_answer,
+            metadata_json=json.dumps(metadata) if metadata else None,
+            shown_at=datetime.now(timezone.utc),
+        )
+        session.add(problem)
+        await session.commit()
+        await session.refresh(problem)
+        return problem.id
+
+
+async def record_problem_answered(
+    problem_id: int,
+    user_answer: Optional[int],
+    is_correct: bool,
+) -> None:
+    """Patch a Problem row with the user's answer and answered_at=now()."""
+    async with async_session_maker() as session:
+        stmt = (
+            update(Problem)
+            .where(Problem.id == problem_id)
+            .values(
+                user_answer=user_answer,
+                is_correct=is_correct,
+                answered_at=datetime.now(timezone.utc),
+            )
+        )
+        await session.execute(stmt)
+        await session.commit()
+
+
+async def get_session_mistakes(session_id: int) -> list[Problem]:
+    """Return Problem rows for a session where the user answered incorrectly.
+
+    Used by the post-session "Retry mistakes" flow to seed a fresh in-memory
+    session with only the failed expressions.
+    """
+    async with async_session_maker() as session:
+        stmt = (
+            select(Problem)
+            .where(Problem.session_id == session_id, Problem.is_correct.is_(False))
+            .order_by(Problem.id)
+        )
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
+
+async def get_avg_problem_time(telegram_id: int) -> Optional[float]:
+    """Average seconds per answered problem for a user, or None if no data."""
+    user = await get_user(telegram_id)
+    if not user:
+        return None
+    async with async_session_maker() as session:
+        delta = func.extract("epoch", Problem.answered_at - Problem.shown_at)
+        stmt = (
+            select(func.avg(delta))
+            .select_from(Problem)
+            .join(TrainingSession, Problem.session_id == TrainingSession.id)
+            .where(
+                TrainingSession.user_id == user.id,
+                Problem.shown_at.is_not(None),
+                Problem.answered_at.is_not(None),
+            )
+        )
+        result = await session.execute(stmt)
+        value = result.scalar()
+        return float(value) if value is not None else None
+
+
+# ---------------------------------------------------------------------------
+# Daily Challenge (new in migration 0002)
+# ---------------------------------------------------------------------------
+
+
+async def get_or_create_daily_challenge(
+    challenge_date: date,
+    generator: Callable[[int], list[dict]],
+    seed_fn: Callable[[date], int],
+) -> DailyChallenge:
+    """Return today's challenge, creating it atomically on first request.
+
+    Concurrent callers race-safely: the INSERT uses ON CONFLICT DO NOTHING,
+    then everyone re-selects by UNIQUE challenge_date.
+    """
+    async with async_session_maker() as session:
+        seed = seed_fn(challenge_date)
+        specs = generator(seed)
+        stmt = (
+            pg_insert(DailyChallenge)
+            .values(challenge_date=challenge_date, seed=seed, problem_specs=specs)
+            .on_conflict_do_nothing(index_elements=["challenge_date"])
+        )
+        await session.execute(stmt)
+        await session.commit()
+
+        result = await session.execute(
+            select(DailyChallenge).where(DailyChallenge.challenge_date == challenge_date)
+        )
+        return result.scalar_one()
+
+
+async def get_or_create_daily_attempt(
+    user_id: int, challenge_date: date
+) -> tuple[DailyChallengeAttempt, bool]:
+    """Return (attempt, created). One attempt per user per day."""
+    async with async_session_maker() as session:
+        stmt = (
+            pg_insert(DailyChallengeAttempt)
+            .values(user_id=user_id, challenge_date=challenge_date)
+            .on_conflict_do_nothing(index_elements=["user_id", "challenge_date"])
+            .returning(DailyChallengeAttempt.id)
+        )
+        result = await session.execute(stmt)
+        inserted_id = result.scalar_one_or_none()
+        await session.commit()
+
+        select_stmt = select(DailyChallengeAttempt).where(
+            DailyChallengeAttempt.user_id == user_id,
+            DailyChallengeAttempt.challenge_date == challenge_date,
+        )
+        attempt = (await session.execute(select_stmt)).scalar_one()
+        return attempt, inserted_id is not None
+
+
+async def complete_daily_attempt(
+    attempt_id: int,
+    correct: int,
+    incorrect: int,
+    total_time_ms: int,
+) -> None:
+    """Mark an attempt as finished with its score and total elapsed time."""
+    async with async_session_maker() as session:
+        stmt = (
+            update(DailyChallengeAttempt)
+            .where(DailyChallengeAttempt.id == attempt_id)
+            .values(
+                correct=correct,
+                incorrect=incorrect,
+                total_time_ms=total_time_ms,
+                completed_at=datetime.now(timezone.utc),
+            )
+        )
+        await session.execute(stmt)
+        await session.commit()
+
+
+async def has_user_done_daily(telegram_id: int, challenge_date: date) -> bool:
+    """True if the user already has a *completed* attempt for the given date.
+
+    A row that exists but has completed_at=NULL means the user opened the
+    challenge but didn't finish — they can still resume, so we report False.
+    """
+    user = await get_user(telegram_id)
+    if not user:
+        return False
+    async with async_session_maker() as session:
+        stmt = select(DailyChallengeAttempt.id).where(
+            DailyChallengeAttempt.user_id == user.id,
+            DailyChallengeAttempt.challenge_date == challenge_date,
+            DailyChallengeAttempt.completed_at.is_not(None),
+        )
+        return (await session.execute(stmt)).scalar_one_or_none() is not None
+
+
+async def get_daily_leaderboard(
+    challenge_date: date, limit: int = 10, offset: int = 0
+) -> tuple[list[tuple[User, DailyChallengeAttempt]], bool]:
+    """Top users for a given day, sorted by (correct DESC, total_time_ms ASC).
+
+    Only completed attempts are included. Returns (rows, has_next).
+    """
+    async with async_session_maker() as session:
+        stmt = (
+            select(User, DailyChallengeAttempt)
+            .join(DailyChallengeAttempt, DailyChallengeAttempt.user_id == User.id)
+            .where(
+                DailyChallengeAttempt.challenge_date == challenge_date,
+                DailyChallengeAttempt.completed_at.is_not(None),
+            )
+            .order_by(
+                desc(DailyChallengeAttempt.correct),
+                DailyChallengeAttempt.total_time_ms,
+                DailyChallengeAttempt.id,
+            )
+            .offset(offset)
+            .limit(limit + 1)
+        )
+        result = await session.execute(stmt)
+        rows = list(result.all())
+        has_next = len(rows) > limit
+        rows = rows[:limit]
+        return [(u, a) for u, a in rows], has_next

@@ -17,6 +17,12 @@ if not DATABASE_URL:
         "postgresql+asyncpg://dotmath:password@postgres:5432/dotmath"
     )
 
+# Optional Redis for FSM persistence. When unset, the bot falls back to
+# MemoryStorage (FSM state is lost on restart — fine for local dev, not for
+# prod, since users mid-training would get stuck). Compose sets this to
+# ``redis://redis:6379/0``.
+REDIS_URL: str = os.getenv("REDIS_URL", "").strip()
+
 # Filesystem path used by services like BackupService and Alembic for ensuring
 # the data directory exists. Not used for DB connection any more.
 DB_PATH: Path = BASE_DIR / "app" / "data"
