@@ -44,20 +44,10 @@ htmlcov/
 
 # Databases / local data
 app/data/
-*.db
-*.sqlite
-*.sqlite3
-*.db-journal
-*.sqlite-journal
-*.db-wal
-*.db-shm
 
 # Logs
 *.log
 logs/
-
-# APScheduler (if you store jobstores on disk later)
-apscheduler.sqlite
 
 # OS
 Thumbs.db

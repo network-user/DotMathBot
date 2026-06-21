@@ -1,134 +1,130 @@
-# ЦифроБот — Telegram-бот для тренировки устного счёта
+# .счёт
 
-Поддерживает 7 типов задач (сложение, вычитание, умножение, деление, деление с остатком, степени, квадратные корни), 3 уровня сложности, серию дней, локализованный интерфейс RU/EN, админ-панель, ежесуточные бэкапы.
+<p>
+  <img src="https://img.shields.io/badge/Python-3.12-3776AB?style=flat" alt="Python 3.12" />
+  <img src="https://img.shields.io/badge/Platform-Telegram%20%7C%20Docker-555?style=flat" alt="Platform" />
+  <img src="https://img.shields.io/badge/Category-Bot-orange?style=flat" alt="Category" />
+  <!-- loc:start --><img src="https://img.shields.io/badge/lines_of_code-9k%2B-lightgrey?style=flat" alt="9k+ lines of code" /><!-- loc:end -->
+</p>
 
-## Архитектура
+<img src="docs/cover.svg" width="720" alt="DotMathBot" />
 
-```
-app/
-├── bootstrap.py            # сборка Bot/Dispatcher/сервисов
-├── config.py               # .env → константы (fail-fast)
-├── main.py                 # точка входа
-├── database/
-│   ├── db.py               # asyncpg-движок и CRUD
-│   └── models.py
-├── handlers/               # aiogram-роутеры
-├── services/
-│   ├── problem_generator.py
-│   ├── notification_service.py
-│   ├── backup_service.py   # pg_dump раз в 12ч
-│   └── stats_service.py
-├── keyboards/
-├── middlewares/
-└── utils/
-migrations/                 # Alembic (async, render_as_batch для совместимости)
-scripts/migrate_sqlite_to_pg.py
-tests/                      # pytest + testcontainers Postgres
-```
+Telegram-бот для тренировки устного счёта на aiogram 3. Семь типов задач, три уровня сложности, серии дней и общий челлендж дня; пользователи и статистика в PostgreSQL, FSM-состояние активной тренировки в Redis с AOF, поэтому сессия переживает рестарт контейнера. Ежесуточные `pg_dump`-бэкапы и админ-панель с выгрузкой дампа по паролю.
 
-## Запуск (с нуля)
+## Что внутри
 
-### Вариант A — всё в Docker (рекомендуется для прода)
+- **7 типов задач**: сложение, вычитание, умножение, деление, деление с остатком, степени, квадратные корни.
+- **3 уровня сложности**: easy / medium / hard, разные диапазоны чисел.
+- **Челлендж дня**: общий для всех набор из 10 задач на календарный день (Europe/Moscow), один зачёт на пользователя, лидерборд.
+- **Серии и профиль**: streak, max-streak, счётчики верных/неверных, топ с опцией скрыть имя.
+- **Быстрый старт**: «любимый запуск» (сложность + режим) одной кнопкой из главного меню.
+- **Перерешивание ошибок**: новая сессия из задач, в которых ошиблись или пропустили; правильные ответы во время сессии не показываются.
+- **Напоминания**: пресеты и кастомные времена (APScheduler, `Europe/Moscow`).
+- **Локализация RU/EN**, переключение в настройках.
+- **5 таблиц**: `users`, `training_sessions`, `problems`, `daily_challenges`, `daily_challenge_attempts`.
 
-1. **Скопируйте окружение** и заполните секреты:
-   ```bash
-   cp .env.example .env
-   # отредактируйте: BOT_TOKEN, ADMIN_IDS, ADMIN_BACKUP_PASSWORD, POSTGRES_PASSWORD
-   ```
-2. **Соберите и запустите** все сервисы (postgres + redis + bot):
-   ```bash
-   docker compose up -d --build
-   ```
-   - Миграции применяются автоматически при старте `bot`.
-   - FSM хранится в Redis с AOF — активные тренировки переживают рестарт контейнера.
-   - Бэкапы пишутся в `./app/data/backups` на хосте (volume).
-3. **Смотрите логи**:
-   ```bash
-   docker compose logs -f bot
-   ```
+## Запуск
 
-### Вариант B — бот на хосте, только БД в Docker
+Всё в Docker (postgres + redis + bot) - рекомендуемый вариант:
 
-1. `cp .env.example .env` и заполните секреты. Для FSM-персистентности укажите `REDIS_URL=redis://localhost:6379/0` и поднимите `redis` сервисом тоже.
-2. `docker compose up -d postgres redis`
-3. `pip install -r requirements.txt`
-4. `python -m app.main` — alembic-миграции применяются при старте.
-
-## Миграция со старого SQLite на PostgreSQL
-
-Если у вас крутится старая версия бота на `app/data/bot.db`, перенесите данные в Postgres без потерь:
-
-1. **Остановите бот** (иначе данные могут уехать после снимка).
-2. **Поднимите Postgres** и накатите схему:
-   ```bash
-   docker compose up -d postgres
-   alembic upgrade head
-   ```
-3. **Прогон в режиме dry-run** — скрипт применит изменения внутри транзакции и сразу откатит, чтобы увидеть row counts и проверить отсутствие orphan-FK:
-   ```bash
-   python -m scripts.migrate_sqlite_to_pg \
-       --sqlite-path app/data/bot.db \
-       --pg-url "$DATABASE_URL" \
-       --dry-run
-   ```
-4. **Реальный перенос**:
-   ```bash
-   python -m scripts.migrate_sqlite_to_pg \
-       --sqlite-path app/data/bot.db \
-       --pg-url "$DATABASE_URL"
-   ```
-   Полезные флаги:
-   - `--batch-size 500` — размер пачки INSERT'ов (по умолчанию 500).
-   - `--truncate-target` — очистить целевые таблицы перед копированием (RESTART IDENTITY CASCADE). Используйте при повторном прогоне после ошибки.
-
-Что делает скрипт:
-- Копирует таблицы в порядке зависимости: `users → training_sessions → problems → user_training_days`.
-- Нормализует наивные `datetime` → UTC-aware (`tzinfo=timezone.utc`).
-- Переводит `custom_notification_times` из строки `"09:00, 18:30"` в JSON-массив `["09:00","18:30"]`.
-- Приводит `0/1` к нативному boolean для PG-столбцов.
-- Заполняет `NULL` в обязательных `created_at/updated_at/started_at` текущим UTC-временем.
-- После каждой таблицы выполняет `setval(pg_get_serial_sequence(...))`, чтобы следующая вставка получила id > MAX(id).
-- В конце проверяет FK-целостность — при наличии orphan-строк миграция падает с сообщением.
-- `INSERT ... ON CONFLICT DO NOTHING` — повторный запуск без `--truncate-target` безопасен.
-
-5. **Запустите бот** и проверьте, что профили и серии дней на месте.
-
-## Навигация и UX
-
-**Главное меню** (`/start`) — 2-колоночная сетка: Тренировка/Челлендж, Профиль/Топ, Шпаргалки/Настройки. Если в настройках задан **«Любимый запуск»**, сверху появляется полноширинная кнопка **⚡ Быстрый старт** — мгновенно запускает сессию с сохранённой сложностью и режимом.
-
-**Меню режимов** двухуровневое: сразу видно 3 основных (умножение, деление, смешанный) + ввод ответа вручную. Остальные (сложение, вычитание, деление с остатком, степени, корни) скрыты под `➕ Ещё режимы…`.
-
-**Настройки** (`/settings` или из главного меню) — единый хаб: любимый запуск (2 шага: сложность → режим), напоминания, имя в топе (показывать/скрыть), язык.
-
-**Перерешивание ошибок** (`🔁 Перерешать ошибки` после сессии): запускает новую сессию из задач, в которых ошиблись или пропустили. Чтобы перерешка была честной, бот **не показывает правильные ответы** во время сессии — только индикатор `❌ Неверно` / `⏭ Пропущено`. На экране перерешки сверху показывается плашка `🔁 Перерешка ошибок`.
-
-**Команды слеша**: `/start`, `/train`, `/profile`, `/top`, `/tips`, `/settings`, `/help`.
-
-## Бэкапы
-
-`BackupService` запускает `pg_dump --format=custom --no-owner --no-acl` каждые 12 часов. Файлы лежат в `app/data/backups/bot_backup_YYYYMMDD_HHMMSS.dump`. Хранятся последние 20.
-
-> ⚠️ `pg_dump` должен быть доступен в `PATH` процесса бота. В docker-окружении используйте образ, в котором установлен `postgresql-client` (например, `apt-get install -y postgresql-client` поверх python-базы). На голом Windows-хосте поставьте Postgres client tools (или весь Postgres) и убедитесь, что `pg_dump --version` работает.
-
-Восстановление:
 ```bash
-pg_restore --clean --if-exists -d "$DATABASE_URL" app/data/backups/bot_backup_20260513_120000.dump
+cp .env.example .env
+# заполните: BOT_TOKEN, ADMIN_IDS, ADMIN_BACKUP_PASSWORD, POSTGRES_PASSWORD
+docker compose up -d --build
+docker compose logs -f bot
 ```
-(URL для `pg_restore` указывайте без префикса `+asyncpg`, например `postgresql://user:pass@host:5432/db`.)
 
-Скачать актуальный бэкап из чата может админ командой/кнопкой "Скачать бэкап" в админ-панели, введя `ADMIN_BACKUP_PASSWORD`.
+Alembic-миграции применяются автоматически при старте `bot` (`init_db` → `upgrade head`). FSM хранится в Redis с AOF - активные тренировки переживают рестарт. Бэкапы пишутся в `./app/data/backups` на хосте.
+
+### Бот на хосте, БД в Docker
+
+```bash
+cp .env.example .env            # укажите REDIS_URL=redis://localhost:6379/0
+docker compose up -d postgres redis
+pip install -r requirements.txt
+python -m app.main
+```
+
+Без `REDIS_URL` бот использует `MemoryStorage` - подходит для локальной разработки, но активные сессии теряются при рестарте.
+
+## Команды
+
+| Команда | Назначение |
+|---------|------------|
+| `docker compose up -d --build` | Поднять postgres + redis + bot |
+| `docker compose logs -f bot` | Логи бота |
+| `python -m app.main` | Запуск бота на хосте |
+| `alembic upgrade head` | Применить миграции вручную |
+| `pytest tests/ -v` | Тесты (testcontainers Postgres) |
+| `pytest tests/ --cov=app --cov-report=term-missing` | Тесты с покрытием |
+
+Slash-команды бота: `/start`, `/train`, `/profile`, `/top`, `/tips`, `/settings`, `/help`.
+
+## Стек
+
+<p>
+  <img src="https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
+  <img src="https://img.shields.io/badge/aiogram-3.15-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="aiogram" />
+  <img src="https://img.shields.io/badge/SQLAlchemy-D71F00?style=for-the-badge&logo=sqlalchemy&logoColor=white" alt="SQLAlchemy" />
+  <img src="https://img.shields.io/badge/Alembic-555555?style=for-the-badge" alt="Alembic" />
+  <img src="https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis" />
+  <img src="https://img.shields.io/badge/Pydantic-E92063?style=for-the-badge&logo=pydantic&logoColor=white" alt="Pydantic" />
+  <img src="https://img.shields.io/badge/APScheduler-555555?style=for-the-badge" alt="APScheduler" />
+  <img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" />
+  <img src="https://img.shields.io/badge/pytest-0A9EDC?style=for-the-badge&logo=pytest&logoColor=white" alt="pytest" />
+  <img src="https://img.shields.io/badge/GitHub_Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white" alt="GitHub Actions" />
+</p>
 
 ## Тесты
 
-Тесты используют [testcontainers](https://testcontainers-python.readthedocs.io/), которые поднимают временный Postgres под каждую сессию. Docker должен быть доступен.
+Тесты поднимают временный Postgres через [testcontainers](https://testcontainers-python.readthedocs.io/) на сессию - Docker должен быть доступен. В CI (без DinD) Postgres даётся сервисом, адрес передаётся через `DOTMATH_TEST_DB_URL`.
 
 ```bash
 pytest tests/ -v
 pytest tests/ --cov=app --cov-report=term-missing
-```
-
-Если Docker недоступен (CI без DinD), укажите готовую тестовую БД:
-```bash
 DOTMATH_TEST_DB_URL=postgresql+asyncpg://user:pass@host:5432/dotmath_test pytest tests/
 ```
+
+## Бэкапы
+
+`BackupService` запускает `pg_dump --format=custom --no-owner --no-acl` каждые 12 часов в `app/data/backups/bot_backup_YYYYMMDD_HHMMSS.dump`, хранятся последние 20. `pg_dump` должен быть в `PATH` (в образе ставится `postgresql-client`). Админ скачивает свежий дамп из чата по `ADMIN_BACKUP_PASSWORD`. Восстановление:
+
+```bash
+pg_restore --clean --if-exists -d "postgresql://user:pass@host:5432/db" app/data/backups/bot_backup_20260513_120000.dump
+```
+
+## Архитектура
+
+Один процесс `python -m app.main`. `bootstrap.setup_app` собирает `Bot`/`Dispatcher`, выбирает FSM-хранилище (Redis или Memory), стартует `NotificationService` и `BackupService` (оба на APScheduler) и регистрирует роутеры. Сервисы прокидываются в хендлеры через `dispatcher` workflow data. Данные - PostgreSQL через async SQLAlchemy + asyncpg; схема версионируется Alembic и накатывается при старте.
+
+```
+app/
+├── main.py                 # точка входа: setup_logging → setup_app → run_app
+├── bootstrap.py            # сборка Bot/Dispatcher/сервисов, выбор FSM-хранилища
+├── config.py               # .env → константы, fail-fast на отсутствие секретов
+├── database/
+│   ├── db.py               # async-движок, init_db (alembic upgrade), CRUD
+│   └── models.py           # User, TrainingSession, Problem, DailyChallenge*
+├── handlers/               # aiogram-роутеры: start, training, daily, profile,
+│                           #   notifications, settings, admin
+├── services/               # problem_generator, notification_*, backup, stats, hint
+├── keyboards/              # inline-клавиатуры и callback-data
+├── middlewares/            # error_middleware
+├── locales/                # ru / en
+└── utils/                  # logger, set_commands, pagination, ui, helpers
+migrations/                 # Alembic (async), versions 0001-0004
+tests/                      # pytest + testcontainers Postgres
+```
+
+- **fail-fast конфиг**: `config.py` падает на старте без `BOT_TOKEN` / `DATABASE_URL` / `ADMIN_BACKUP_PASSWORD`.
+- **FSM-персистентность**: `REDIS_URL` задан → `RedisStorage`, иначе `MemoryStorage` (dev).
+- **Миграции при старте**: `init_db` зовёт `alembic upgrade head`, ручной шаг не нужен.
+- **Челлендж дня идемпотентен**: `UNIQUE(challenge_date)` + `ON CONFLICT DO NOTHING` делают первый клик безопасным при гонке.
+- **Время - `Europe/Moscow`**: напоминания, бэкапы и граница календарного дня челленджа.
+
+## Лицензия
+
+© 2026 DotCore. Все права защищены.
+
+Проприетарный код. Использование, копирование, изменение и распространение запрещены без письменного разрешения автора. Исходный код открыт только для ознакомления. См. [LICENSE](LICENSE).

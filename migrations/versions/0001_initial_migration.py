@@ -7,9 +7,6 @@ Four tables, hand-written (do not regenerate from models):
 - problems            — individual problems inside a session.
 - user_training_days  — pre-aggregated "the user trained on date D" set used
                         for the day-streak leaderboard.
-
-Production data is migrated from the legacy SQLite snapshot via
-``scripts/migrate_sqlite_to_pg.py`` after this migration runs.
 """
 from __future__ import annotations
 
