@@ -1,3 +1,4 @@
+import hmac
 import logging
 import os
 
@@ -164,13 +165,13 @@ async def admin_download_backup_process(message: Message, state: FSMContext) -> 
         return
 
     lang = await get_user_language(message.from_user.id)
-    password = message.text
+    password = message.text or ""
     try:
         await message.delete()
     except Exception:
         pass
 
-    if password == ADMIN_BACKUP_PASSWORD:
+    if hmac.compare_digest(password.encode("utf-8"), ADMIN_BACKUP_PASSWORD.encode("utf-8")):
         from app.services.backup_service import BackupService
 
         backup_service = BackupService(message.bot)

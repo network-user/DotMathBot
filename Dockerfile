@@ -24,5 +24,12 @@ COPY . .
 # Backups + alembic data dir; the volume mount in compose persists it.
 RUN mkdir -p /app/app/data/backups /app/logs
 
+# Drop root: run as an unprivileged user. The bind-mounted host dirs
+# (./app/data, ./logs in docker-compose) must be writable by this UID on the
+# host, e.g. once: chown -R 10001:10001 app/data logs
+RUN useradd --system --uid 10001 --no-create-home appuser \
+    && chown -R appuser:appuser /app
+USER appuser
+
 ENTRYPOINT ["tini", "--"]
 CMD ["python", "-m", "app.main"]
