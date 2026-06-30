@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
+from urllib.parse import urlsplit, urlunsplit
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram import Bot
@@ -31,6 +34,33 @@ def _to_libpq_url(url: str) -> str:
         if url.startswith(prefix):
             return "postgresql://" + url[len(prefix):]
     return url
+
+
+_DSN_CREDENTIALS_RE = re.compile(r"(?P<scheme>\w+://)(?P<user>[^:@/\s]+):[^@/\s]+@")
+
+
+def _scrub_secrets(text: str) -> str:
+    """Mask the password in any ``scheme://user:pass@host`` URL before the text
+    is logged or sent to admins, so pg_dump stderr can't surface credentials."""
+    return _DSN_CREDENTIALS_RE.sub(r"\g<scheme>\g<user>:***@", text)
+
+
+def _split_libpq_url(url: str) -> tuple[str, str | None]:
+    """Split a libpq URL into (dsn_without_password, password).
+
+    The password is handed to pg_dump via ``PGPASSWORD`` instead of the DSN so
+    it stays out of the process arg list (visible in ``ps``/``docker inspect``)."""
+    libpq = _to_libpq_url(url)
+    parsed = urlsplit(libpq)
+    if parsed.password is None:
+        return libpq, None
+    userinfo, _, hostport = parsed.netloc.rpartition("@")
+    user = userinfo.split(":", 1)[0]
+    new_netloc = f"{user}@{hostport}" if user else hostport
+    sanitized = urlunsplit(
+        (parsed.scheme, new_netloc, parsed.path, parsed.query, parsed.fragment)
+    )
+    return sanitized, parsed.password
 
 
 def _format_size(num_bytes: int) -> str:
@@ -57,22 +87,28 @@ class BackupService:
         backup_name = f"{BACKUP_FILENAME_PREFIX}{timestamp}{BACKUP_FILENAME_SUFFIX}"
         backup_path = self.backups_dir / backup_name
 
-        libpq_url = _to_libpq_url(DATABASE_URL)
+        dsn, pg_password = _split_libpq_url(DATABASE_URL)
+        env = os.environ.copy()
+        if pg_password is not None:
+            env["PGPASSWORD"] = pg_password
         proc = await asyncio.create_subprocess_exec(
             "pg_dump",
             "--format=custom",
             "--no-owner",
             "--no-acl",
-            f"--dbname={libpq_url}",
+            f"--dbname={dsn}",
             f"--file={backup_path}",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            env=env,
         )
         stdout, stderr = await proc.communicate()
         exit_code = proc.returncode or 0
 
         if exit_code != 0 or not backup_path.exists():
-            err_text = (stderr or b"").decode("utf-8", errors="replace").strip()
+            err_text = _scrub_secrets(
+                (stderr or b"").decode("utf-8", errors="replace").strip()
+            )
             logger.error(
                 "pg_dump failed (exit=%s): %s", exit_code, err_text or "<no stderr>"
             )

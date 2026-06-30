@@ -190,11 +190,9 @@ async def admin_download_backup_process(message: Message, state: FSMContext) -> 
                 )
             else:
                 await message.answer(get_text("admin_backup_file_error", lang))
-        except Exception as e:
-            await message.answer(
-                get_text("admin_backup_critical_error", lang).format(error=str(e)),
-                parse_mode="Markdown",
-            )
+        except Exception:
+            logger.exception("Admin-triggered backup download failed")
+            await message.answer(get_text("admin_backup_critical_error", lang))
     else:
         await message.answer(get_text("admin_backup_wrong_password", lang))
 

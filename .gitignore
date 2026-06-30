@@ -37,6 +37,9 @@ htmlcov/
 *.swo
 .DS_Store
 
+# Local agent settings (Claude Code)
+.claude/settings.local.json
+
 # Environment variables
 .env
 .env.*

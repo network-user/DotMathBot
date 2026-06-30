@@ -199,7 +199,7 @@ TEXTS = {
     "admin_backup_creating": "🔄 Creating backup...",
     "admin_backup_caption": "💾 Backup: {filename}",
     "admin_backup_file_error": "❌ Failed to create backup file.",
-    "admin_backup_critical_error": "❌ Critical error: `{error}`",
+    "admin_backup_critical_error": "❌ Critical error while creating the backup. See server logs for details.",
     "admin_backup_wrong_password": "❌ Wrong password.",
     "admin_backup_ok": "Backup created!",
     "admin_startup_notification": (

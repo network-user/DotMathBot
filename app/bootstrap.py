@@ -1,8 +1,10 @@
 """Bot setup and run: initializes DB, bot, dispatcher, services, handlers."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import NamedTuple
 from zoneinfo import ZoneInfo
 
@@ -11,7 +13,7 @@ from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.fsm.storage.base import BaseStorage
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from app.config import ADMIN_IDS, BOT_TOKEN, REDIS_URL
+from app.config import ADMIN_IDS, BOT_TOKEN, DB_PATH, REDIS_URL
 from app.database.db import init_db
 from app.handlers import admin, daily, notifications, profile, settings, start, training
 from app.locales import get_text
@@ -22,6 +24,24 @@ from app.services.notification_service import NotificationService
 from app.utils.set_commands import set_bot_commands
 
 logger = logging.getLogger(__name__)
+
+HEARTBEAT_FILE = Path(DB_PATH) / ".heartbeat"
+HEARTBEAT_INTERVAL_SECONDS = 30
+
+
+async def _heartbeat_loop() -> None:
+    """Refresh a heartbeat file so the container HEALTHCHECK can tell the polling
+    loop is alive: a wedged event loop stops updating the file's mtime."""
+    try:
+        HEARTBEAT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        logger.warning("Heartbeat dir create failed: %s", exc)
+    while True:
+        try:
+            HEARTBEAT_FILE.write_text("ok")
+        except OSError as exc:
+            logger.warning("Heartbeat write failed: %s", exc)
+        await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS)
 
 
 async def notify_admins_startup(bot: Bot, reminders_count: int) -> None:
@@ -114,6 +134,7 @@ async def setup_app() -> App:
 
 
 async def run_app(app: App) -> None:
+    heartbeat_task = asyncio.create_task(_heartbeat_loop())
     try:
         await notify_admins_startup(
             app.bot, reminders_count=app.notification_service.get_all_jobs_count()
@@ -124,6 +145,7 @@ async def run_app(app: App) -> None:
             allowed_updates=app.dp.resolve_used_update_types(),
         )
     finally:
+        heartbeat_task.cancel()
         logger.info("Shutting down bot...")
         app.notification_service.shutdown()
         app.backup_service.scheduler.shutdown()

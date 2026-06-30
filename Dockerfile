@@ -31,5 +31,10 @@ RUN useradd --system --uid 10001 --no-create-home appuser \
     && chown -R appuser:appuser /app
 USER appuser
 
+# Liveness: the bot refreshes /app/app/data/.heartbeat every 30s (see bootstrap).
+# A stale file (wedged event loop / dead process) flips the container to unhealthy.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+    CMD ["python", "-c", "import os,sys,time; p='/app/app/data/.heartbeat'; sys.exit(0 if os.path.exists(p) and time.time()-os.path.getmtime(p) < 120 else 1)"]
+
 ENTRYPOINT ["tini", "--"]
 CMD ["python", "-m", "app.main"]
