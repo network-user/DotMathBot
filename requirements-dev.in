@@ -9,3 +9,7 @@ pytest>=8.3,<9             # pytest 9 needs a pytest-asyncio major bump that rew
 pytest-asyncio>=0.24,<0.26
 pytest-cov>=5,<7
 testcontainers[postgres]>=4.8.2,<5
+
+# testcontainers -> docker SDK pulls pywin32 (Windows-only). Pin the marker so a
+# lock compiled on Windows still installs on Linux CI (marker evaluates False).
+pywin32 ; sys_platform == "win32"
