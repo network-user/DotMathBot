@@ -1,0 +1,18 @@
+# Prod runtime dependencies (imported under app/).
+# Compile the pinned, hashed lock with:
+#   pip-compile --generate-hashes --output-file=requirements.txt requirements.in
+# Dev/test deps live in requirements-dev.in (never installed into the prod image).
+
+aiogram>=3.29,<4          # >=3.29 lifts the old aiohttp<3.11 cap -> patched aiohttp
+aiohttp>=3.14.1           # explicit transitive floor: closes 30 CVEs present in 3.10.x
+pydantic>=2.9,<3
+pydantic-settings>=2.7,<3
+python-dotenv>=1.2.2      # CVE-2026-28684 (symlink overwrite) fixed in 1.2.2
+redis>=5.2,<8
+SQLAlchemy>=2.0.36,<2.1
+asyncpg>=0.30,<0.31
+psycopg[binary]>=3.2.3,<3.3
+alembic>=1.14,<1.15
+psutil>=5.9.8,<8
+apscheduler>=3.10.4,<4
+cryptography>=43,<49       # symmetric encryption of pg_dump backups at rest/in transit

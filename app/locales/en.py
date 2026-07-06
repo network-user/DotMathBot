@@ -201,6 +201,7 @@ TEXTS = {
     "admin_backup_file_error": "❌ Failed to create backup file.",
     "admin_backup_critical_error": "❌ Critical error while creating the backup. See server logs for details.",
     "admin_backup_wrong_password": "❌ Wrong password.",
+    "admin_backup_locked": "🔒 Too many wrong attempts. Try again later.",
     "admin_backup_ok": "Backup created!",
     "admin_startup_notification": (
         "🟢 **Bot started**\n"

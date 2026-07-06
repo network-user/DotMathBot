@@ -16,6 +16,7 @@ from app.handlers.training import TrainingStates
 from app.keyboards.callbacks import BackCB, MenuCB
 from app.keyboards.inline import InlineKeyboards
 from app.locales import get_text
+from app.utils.helpers import escape_md
 from app.utils.ui import today_msk
 
 router = Router()
@@ -43,7 +44,7 @@ async def start_handler(message: Message, state: FSMContext) -> None:
     daily_done = await has_user_done_daily(message.from_user.id, today_msk())
     favorite_mode = getattr(user, "favorite_mode", None)
     favorite_difficulty = getattr(user, "favorite_difficulty", None)
-    name = message.from_user.first_name or get_text("welcome_fallback_name", lang)
+    name = escape_md(message.from_user.first_name) or get_text("welcome_fallback_name", lang)
     text = get_text("welcome", lang).format(name=name)
 
     await message.answer(text, reply_markup=ReplyKeyboardRemove(), parse_mode="Markdown")

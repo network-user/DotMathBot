@@ -1,6 +1,7 @@
 import hmac
 import logging
 import os
+import time
 
 import psutil
 from aiogram import F, Router
@@ -19,6 +20,7 @@ from app.database.db import (
 from app.keyboards.callbacks import AdminCB
 from app.keyboards.inline import InlineKeyboards
 from app.locales import get_text
+from app.utils.helpers import escape_md
 
 
 class AdminStates(StatesGroup):
@@ -33,8 +35,35 @@ def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
 
 
+# Brute-force throttle for the backup password. The handler already sits behind
+# is_admin (this is defense-in-depth, not the primary gate), so a per-process
+# in-memory counter is proportionate. {user_id: (fail_count, locked_until_monotonic)}
+_BACKUP_MAX_ATTEMPTS = 5
+_BACKUP_LOCKOUT_SECONDS = 300
+_backup_attempts: dict[int, tuple[int, float]] = {}
+
+
+def _backup_lock_remaining(user_id: int) -> int:
+    """Seconds of lockout left for this admin, or 0 if not locked."""
+    _, locked_until = _backup_attempts.get(user_id, (0, 0.0))
+    remaining = locked_until - time.monotonic()
+    return int(remaining) + 1 if remaining > 0 else 0
+
+
+def _record_backup_failure(user_id: int) -> int:
+    """Register a wrong-password attempt; return lockout seconds if now locked, else 0."""
+    fails, _ = _backup_attempts.get(user_id, (0, 0.0))
+    fails += 1
+    if fails >= _BACKUP_MAX_ATTEMPTS:
+        _backup_attempts[user_id] = (0, time.monotonic() + _BACKUP_LOCKOUT_SECONDS)
+        return _BACKUP_LOCKOUT_SECONDS
+    _backup_attempts[user_id] = (fails, 0.0)
+    return 0
+
+
 def _escape_md(value: str) -> str:
-    return value.replace("_", "\\_").replace("*", "\\*").replace("`", "\\`")
+    # Shared escaper: also neutralises "[" (link injection) and backslash bypass.
+    return escape_md(value)
 
 
 @router.message(Command("admin"))
@@ -153,6 +182,9 @@ async def admin_download_backup_prompt(
         return
 
     lang = await get_user_language(callback.from_user.id)
+    if _backup_lock_remaining(callback.from_user.id) > 0:
+        await callback.answer(get_text("admin_backup_locked", lang), show_alert=True)
+        return
     await state.set_state(AdminStates.wait_backup_password)
     await callback.message.answer(get_text("admin_backup_prompt", lang))
     await callback.answer()
@@ -171,7 +203,13 @@ async def admin_download_backup_process(message: Message, state: FSMContext) -> 
     except Exception:
         pass
 
+    if _backup_lock_remaining(message.from_user.id) > 0:
+        await message.answer(get_text("admin_backup_locked", lang))
+        await state.clear()
+        return
+
     if hmac.compare_digest(password.encode("utf-8"), ADMIN_BACKUP_PASSWORD.encode("utf-8")):
+        _backup_attempts.pop(message.from_user.id, None)
         from app.services.backup_service import BackupService
 
         backup_service = BackupService(message.bot)
@@ -194,6 +232,11 @@ async def admin_download_backup_process(message: Message, state: FSMContext) -> 
             logger.exception("Admin-triggered backup download failed")
             await message.answer(get_text("admin_backup_critical_error", lang))
     else:
-        await message.answer(get_text("admin_backup_wrong_password", lang))
+        locked = _record_backup_failure(message.from_user.id)
+        logger.warning("Wrong backup password from admin %s", message.from_user.id)
+        if locked:
+            await message.answer(get_text("admin_backup_locked", lang))
+        else:
+            await message.answer(get_text("admin_backup_wrong_password", lang))
 
     await state.clear()

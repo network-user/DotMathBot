@@ -1,0 +1,11 @@
+# Dev/test-only dependencies. NEVER installed into the prod image
+# (Dockerfile installs requirements.txt only). Compile with:
+#   pip-compile --generate-hashes --output-file=requirements-dev.txt requirements-dev.in
+-c requirements.txt        # pin shared transitive deps to the prod lock
+
+pytest>=8.3,<9             # pytest 9 needs a pytest-asyncio major bump that reworks the
+                           # session event_loop fixture in conftest.py; deferred as a
+                           # local dev-only Low (CVE-2025-71176). See docs/audit report.
+pytest-asyncio>=0.24,<0.26
+pytest-cov>=5,<7
+testcontainers[postgres]>=4.8.2,<5

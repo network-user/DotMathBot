@@ -1,4 +1,4 @@
-from app.utils.helpers import get_accuracy_percentage
+from app.utils.helpers import escape_md, get_accuracy_percentage
 from app.database.db import (
     get_daily_leaderboard,
     get_top_users,
@@ -90,7 +90,7 @@ class StatsService:
             if not user.show_in_top:
                 name = f"_{hidden_label}_"
             else:
-                name = (user.first_name or user.username or anonymous).replace("_", "\\_").replace("*", "\\*")
+                name = escape_md(user.first_name or user.username or anonymous)
             
             text += get_text(row_key, lang).format(
                 medal=medal,
@@ -135,11 +135,7 @@ class StatsService:
             if not user.show_in_top:
                 name = f"_{hidden}_"
             else:
-                name = (
-                    (user.first_name or user.username or anonymous)
-                    .replace("_", "\\_")
-                    .replace("*", "\\*")
-                )
+                name = escape_md(user.first_name or user.username or anonymous)
             text += row_template.format(
                 medal=medal,
                 name=name,

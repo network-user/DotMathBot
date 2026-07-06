@@ -45,6 +45,18 @@ htmlcov/
 .env.*
 !.env.example
 
+# Key material / secrets (never commit)
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+id_rsa
+id_rsa.*
+secrets.json
+credentials.json
+service-account*.json
+
 # Databases / local data
 app/data/
 

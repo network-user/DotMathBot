@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1
-FROM python:3.12-slim AS base
+# Pinned by digest (not just the mutable tag) so a re-pushed tag can't change
+# the base silently. Refresh digest when intentionally bumping the base image.
+FROM python:3.12-slim@sha256:423ed6ab25b1921a477529254bfeeabf5855151dc2c3141699a1bfc852199fbf AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -16,8 +18,10 @@ RUN apt-get update \
 
 WORKDIR /app
 
+# Prod deps only, from the hashed lock. Dev/test deps (requirements-dev.txt)
+# are never installed here. --require-hashes enforces artifact integrity.
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --require-hashes --no-cache-dir -r requirements.txt
 
 COPY . .
 

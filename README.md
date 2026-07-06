@@ -11,11 +11,8 @@
 
 <!-- audit:start -->
 <p>
-  <img src="https://img.shields.io/badge/security_audit-passed-3fb950?style=flat" alt="security audit passed" />
-  <img src="https://img.shields.io/badge/level-full-8957e5?style=flat" alt="level full" />
-  <img src="https://img.shields.io/badge/scope-leaks_%2B_code-bf3989?style=flat" alt="scope leaks and code" />
-  <img src="https://img.shields.io/badge/model-Claude_Opus_4.8-555?style=flat" alt="model" />
-  <img src="https://img.shields.io/badge/date-2026--06--30-555?style=flat" alt="date" />
+  <a href="docs/audit/latest.md"><img src="https://img.shields.io/badge/security_audit-passed-3fb950?style=flat" alt="security audit passed - full, leaks + code" /></a>
+  <a href="docs/audit/2026-07-06-emerald-abacus.md"><img src="https://img.shields.io/badge/date-2026--07--06-555?style=flat" alt="audit date" /></a>
 </p>
 <!-- audit:end -->
 
@@ -98,9 +95,13 @@ DOTMATH_TEST_DB_URL=postgresql+asyncpg://user:pass@host:5432/dotmath_test pytest
 
 ## Бэкапы
 
-`BackupService` запускает `pg_dump --format=custom --no-owner --no-acl` каждые 12 часов в `app/data/backups/bot_backup_YYYYMMDD_HHMMSS.dump`, хранятся последние 20. `pg_dump` должен быть в `PATH` (в образе ставится `postgresql-client`). Админ скачивает свежий дамп из чата по `ADMIN_BACKUP_PASSWORD`. Восстановление:
+`BackupService` запускает `pg_dump --format=custom --no-owner --no-acl` каждые 12 часов, шифрует дамп (AES через Fernet, ключ из `ADMIN_BACKUP_PASSWORD` + PBKDF2) и кладёт в `app/data/backups/bot_backup_YYYYMMDD_HHMMSS.dump.enc` (каталог `0700`, файл `0600`), хранятся последние 20. `pg_dump` должен быть в `PATH` (в образе ставится `postgresql-client`). Админ скачивает свежий зашифрованный дамп из чата по `ADMIN_BACKUP_PASSWORD` (не более 5 попыток, затем блокировка). Восстановление - сначала расшифровка тем же паролем, потом `pg_restore`:
 
 ```bash
+# 1. Расшифровать (пароль из ADMIN_BACKUP_PASSWORD или спросит интерактивно):
+python -m app.services.backup_service app/data/backups/bot_backup_20260513_120000.dump.enc
+# -> создаст рядом bot_backup_20260513_120000.dump
+# 2. Восстановить:
 pg_restore --clean --if-exists -d "postgresql://user:pass@host:5432/db" app/data/backups/bot_backup_20260513_120000.dump
 ```
 

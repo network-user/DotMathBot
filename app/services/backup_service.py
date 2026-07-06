@@ -8,6 +8,7 @@ exit code) after each run.
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
 import os
 import re
@@ -18,14 +19,52 @@ from urllib.parse import urlsplit, urlunsplit
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram import Bot
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
-from app.config import ADMIN_IDS, DATABASE_URL, DB_PATH
+from app.config import ADMIN_BACKUP_PASSWORD, ADMIN_IDS, DATABASE_URL, DB_PATH
 
 logger = logging.getLogger(__name__)
 
 BACKUP_RETENTION = 20
 BACKUP_FILENAME_PREFIX = "bot_backup_"
-BACKUP_FILENAME_SUFFIX = ".dump"
+# Dumps are encrypted at rest (and in transit over Telegram), so the artifact is
+# a ``.dump.enc`` blob; decrypt with ``python -m app.services.backup_service``.
+BACKUP_FILENAME_SUFFIX = ".dump.enc"
+
+_ENC_MAGIC = b"DMB1"           # DotMathBot encrypted-backup format marker, v1
+_ENC_SALT_LEN = 16
+_ENC_KDF_ITERATIONS = 200_000
+
+
+def _derive_fernet_key(password: str, salt: bytes) -> bytes:
+    """Derive a Fernet key from the backup password + per-file salt (PBKDF2-HMAC-SHA256)."""
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=_ENC_KDF_ITERATIONS,
+    )
+    return base64.urlsafe_b64encode(kdf.derive(password.encode("utf-8")))
+
+
+def _encrypt_file(src: Path, dst: Path, password: str) -> None:
+    """Encrypt ``src`` into ``dst`` (magic || salt || Fernet token). AES-128-CBC + HMAC via Fernet."""
+    salt = os.urandom(_ENC_SALT_LEN)
+    token = Fernet(_derive_fernet_key(password, salt)).encrypt(src.read_bytes())
+    dst.write_bytes(_ENC_MAGIC + salt + token)
+
+
+def decrypt_backup(src: Path, dst: Path, password: str) -> None:
+    """Decrypt a ``.dump.enc`` backup produced by this service back to a pg_restore-able dump."""
+    blob = src.read_bytes()
+    if blob[:len(_ENC_MAGIC)] != _ENC_MAGIC:
+        raise ValueError("Not a DotMathBot encrypted backup (bad magic header)")
+    salt = blob[len(_ENC_MAGIC):len(_ENC_MAGIC) + _ENC_SALT_LEN]
+    token = blob[len(_ENC_MAGIC) + _ENC_SALT_LEN:]
+    data = Fernet(_derive_fernet_key(password, salt)).decrypt(token)
+    dst.write_bytes(data)
 
 
 def _to_libpq_url(url: str) -> str:
@@ -79,6 +118,7 @@ class BackupService:
         self.backups_dir = Path(DB_PATH) / "backups"
         try:
             self.backups_dir.mkdir(parents=True, exist_ok=True)
+            os.chmod(self.backups_dir, 0o700)  # backups hold full PII: owner-only
         except OSError as e:
             logger.error("Could not create backups directory %s: %s", self.backups_dir, e)
 
@@ -86,6 +126,7 @@ class BackupService:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         backup_name = f"{BACKUP_FILENAME_PREFIX}{timestamp}{BACKUP_FILENAME_SUFFIX}"
         backup_path = self.backups_dir / backup_name
+        plain_path = backup_path.with_suffix("")  # strip .enc -> temporary plaintext dump
 
         dsn, pg_password = _split_libpq_url(DATABASE_URL)
         env = os.environ.copy()
@@ -97,7 +138,7 @@ class BackupService:
             "--no-owner",
             "--no-acl",
             f"--dbname={dsn}",
-            f"--file={backup_path}",
+            f"--file={plain_path}",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
@@ -105,15 +146,29 @@ class BackupService:
         stdout, stderr = await proc.communicate()
         exit_code = proc.returncode or 0
 
-        if exit_code != 0 or not backup_path.exists():
+        if exit_code != 0 or not plain_path.exists():
             err_text = _scrub_secrets(
                 (stderr or b"").decode("utf-8", errors="replace").strip()
             )
             logger.error(
                 "pg_dump failed (exit=%s): %s", exit_code, err_text or "<no stderr>"
             )
+            plain_path.unlink(missing_ok=True)
             await self._notify_admins_failure(backup_name, exit_code, err_text)
             return None
+
+        # Encrypt at rest and in transit: the dump holds all user PII, so the
+        # plaintext never leaves this function (temp file removed in finally).
+        try:
+            _encrypt_file(plain_path, backup_path, ADMIN_BACKUP_PASSWORD)
+            os.chmod(backup_path, 0o600)
+        except Exception:
+            logger.exception("Backup encryption failed")
+            backup_path.unlink(missing_ok=True)
+            await self._notify_admins_failure(backup_name, exit_code, "encryption failed")
+            return None
+        finally:
+            plain_path.unlink(missing_ok=True)
 
         size = backup_path.stat().st_size
         logger.info("Backup created: %s (%s)", backup_name, _format_size(size))
@@ -173,3 +228,26 @@ class BackupService:
         self.scheduler.add_job(self.create_backup, "interval", hours=12)
         self.scheduler.start()
         logger.info("Backup scheduler started (every 12 hours)")
+
+
+def _decrypt_cli() -> None:
+    """Restore helper: decrypt a .dump.enc backup to a pg_restore-able .dump.
+
+    Usage: python -m app.services.backup_service <backup.dump.enc> [out.dump]
+    Password is read from ADMIN_BACKUP_PASSWORD or prompted interactively.
+    """
+    import getpass
+    import sys
+
+    if len(sys.argv) < 2:
+        print("Usage: python -m app.services.backup_service <backup.dump.enc> [out.dump]")
+        raise SystemExit(2)
+    src = Path(sys.argv[1])
+    dst = Path(sys.argv[2]) if len(sys.argv) > 2 else src.with_suffix("")  # drop .enc
+    password = os.environ.get("ADMIN_BACKUP_PASSWORD") or getpass.getpass("Backup password: ")
+    decrypt_backup(src, dst, password)
+    print(f"Decrypted -> {dst}")
+
+
+if __name__ == "__main__":
+    _decrypt_cli()

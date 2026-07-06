@@ -201,6 +201,7 @@ TEXTS = {
     "admin_backup_file_error": "❌ Ошибка при создании файла бэкапа.",
     "admin_backup_critical_error": "❌ Критическая ошибка при создании бэкапа. Подробности в логах сервера.",
     "admin_backup_wrong_password": "❌ Неверный пароль.",
+    "admin_backup_locked": "🔒 Слишком много неверных попыток. Повторите позже.",
     "admin_backup_ok": "Бэкап создан!",
     "admin_startup_notification": (
         "🟢 **Бот запущен**\n"

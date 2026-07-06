@@ -18,7 +18,7 @@ from app.database.db import init_db
 from app.handlers import admin, daily, notifications, profile, settings, start, training
 from app.locales import get_text
 from app.middlewares.error_middleware import ErrorMiddleware
-from app.services.backup_service import BackupService
+from app.services.backup_service import BackupService, _scrub_secrets
 from app.services.notification_loader import load_scheduled_users
 from app.services.notification_service import NotificationService
 from app.utils.set_commands import set_bot_commands
@@ -86,7 +86,8 @@ def _build_fsm_storage() -> BaseStorage:
 
     from aiogram.fsm.storage.redis import RedisStorage
     storage = RedisStorage.from_url(REDIS_URL)
-    logger.info("Using Redis FSM storage at %s", REDIS_URL)
+    # Scrub any password in the DSN before logging (redis://user:pass@host).
+    logger.info("Using Redis FSM storage at %s", _scrub_secrets(REDIS_URL))
     return storage
 
 

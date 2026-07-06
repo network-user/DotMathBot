@@ -2,6 +2,30 @@ from typing import Optional
 from datetime import datetime, timedelta, timezone
 
 
+# Legacy Telegram "Markdown" metacharacters that can open an entity or a link.
+# Untrusted text (user display names) must have these escaped before it lands in
+# a parse_mode="Markdown" message: a crafted first_name like ``[x](http://phish)``
+# would otherwise inject a clickable link into shared messages (the leaderboard),
+# and an unbalanced `` ` ``/``*``/``_`` breaks rendering (Telegram HTTP 400).
+_MD_SPECIAL = ("_", "*", "`", "[")
+
+
+def escape_md(text: Optional[str]) -> str:
+    """Escape legacy-Markdown metacharacters in untrusted text.
+
+    Backslash is escaped first so an attacker can't neutralise our escape by
+    prefixing one (``\\[`` would re-open the link otherwise). Covers the full
+    set Telegram's legacy ``Markdown`` parser treats as special. New code should
+    prefer parse_mode="HTML" with ``html.escape`` or MarkdownV2.
+    """
+    if not text:
+        return ""
+    text = text.replace("\\", "\\\\")
+    for ch in _MD_SPECIAL:
+        text = text.replace(ch, "\\" + ch)
+    return text
+
+
 def format_time(dt: datetime) -> str:
     return dt.strftime("%d.%m.%Y %H:%M")
 
