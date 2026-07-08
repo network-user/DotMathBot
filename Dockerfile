@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
-# Pinned by digest (not just the mutable tag) so a re-pushed tag can't change
-# the base silently. Refresh digest when intentionally bumping the base image.
-FROM python:3.12-slim@sha256:423ed6ab25b1921a477529254bfeeabf5855151dc2c3141699a1bfc852199fbf AS base
+# Debian stable (bookworm) explicitly: the plain python:3.12-slim tag tracks
+# testing/trixie, whose apt indices intermittently 404 during release churn.
+FROM python:3.12-slim-bookworm AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
