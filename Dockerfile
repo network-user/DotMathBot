@@ -10,10 +10,24 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # postgresql-client gives us pg_dump for BackupService; tini reaps signals so
 # the bot shuts down cleanly when compose sends SIGTERM.
+# Debian bookworm's own apt repo only ships postgresql-client 15, but
+# docker-compose runs postgres:16 — pg_dump refuses to dump a server newer
+# than itself ("aborting because of server version mismatch"), so pull
+# postgresql-client-16 from the official PGDG apt repo to match the server.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        postgresql-client \
+        ca-certificates \
+        curl \
+        gnupg \
         tini \
+    && install -d /usr/share/postgresql-common/pgdg \
+    && curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail \
+        https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+    && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client-16 \
+    && apt-get purge -y --auto-remove curl gnupg \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
